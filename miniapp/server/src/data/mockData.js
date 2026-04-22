@@ -1,0 +1,232 @@
+export const mockOverview = {
+  status: "online",
+  workload: "6 active",
+  health: "stable",
+  currentBot: "telegram-main",
+  instance: "prod-eu-1",
+  latestCron: "log_monitor",
+  nearestCron: "daily_summary",
+  primaryModel: "gpt-oss:120b"
+};
+
+export const mockSessions = [
+  {
+    id: "session_4821",
+    model: "gpt-oss:120b",
+    status: "running",
+    last: "analysis completed",
+    tokens: "12.4k"
+  },
+  {
+    id: "session_4820",
+    model: "qwen-coder",
+    status: "idle",
+    last: "waiting for command",
+    tokens: "5.2k"
+  },
+  {
+    id: "session_4818",
+    model: "deepseek-r1",
+    status: "paused",
+    last: "pending exec approval",
+    tokens: "17.9k"
+  }
+];
+
+export const mockAi = {
+  totals: {
+    tokens24h: "1.53M",
+    approxBudgetUsd: "18.40",
+    totalTokens: 1530000,
+    inputTokens: 910000,
+    outputTokens: 620000,
+    requests: 480
+  },
+  primaryModel: "gpt-oss:120b",
+  fallbackModels: ["qwen-coder", "deepseek-r1"],
+  ranges: ["1h", "24h", "7d", "30d", "all"],
+  rangeMetrics: {
+    "1h": {
+      totals: {
+        totalTokens: 128000,
+        inputTokens: 78000,
+        outputTokens: 42000,
+        reasoningTokens: 6000,
+        cacheTokens: 2000,
+        requests: 41,
+        costUsd: 1.72
+      },
+      byModel: [
+        { id: "gpt-oss:120b", role: "primary", tokens: 69000, inputTokens: 41000, outputTokens: 23000, requests: 22, costUsd: 0.94, latency: "4.1s" },
+        { id: "qwen-coder", role: "fallback", tokens: 37000, inputTokens: 24000, outputTokens: 11000, requests: 14, costUsd: 0.43, latency: "1.7s" },
+        { id: "deepseek-r1", role: "fallback", tokens: 22000, inputTokens: 13000, outputTokens: 8000, requests: 5, costUsd: 0.35, latency: "6.2s" }
+      ],
+      timeseries: [
+        { label: "00", inputTokens: 9000, outputTokens: 5000, requests: 4, costUsd: 0.18 },
+        { label: "10", inputTokens: 12000, outputTokens: 6400, requests: 6, costUsd: 0.24 },
+        { label: "20", inputTokens: 10500, outputTokens: 5400, requests: 5, costUsd: 0.21 },
+        { label: "30", inputTokens: 16000, outputTokens: 9000, requests: 8, costUsd: 0.35 },
+        { label: "40", inputTokens: 14200, outputTokens: 7800, requests: 7, costUsd: 0.31 },
+        { label: "50", inputTokens: 16300, outputTokens: 8400, requests: 11, costUsd: 0.43 }
+      ]
+    },
+    "24h": {
+      totals: {
+        totalTokens: 1530000,
+        inputTokens: 910000,
+        outputTokens: 512000,
+        reasoningTokens: 71000,
+        cacheTokens: 37000,
+        requests: 480,
+        costUsd: 18.4
+      },
+      byModel: [
+        { id: "gpt-oss:120b", role: "primary", tokens: 800000, inputTokens: 490000, outputTokens: 264000, requests: 320, costUsd: 10.34, latency: "4.2s" },
+        { id: "qwen-coder", role: "fallback", tokens: 420000, inputTokens: 260000, outputTokens: 132000, requests: 120, costUsd: 4.21, latency: "1.8s" },
+        { id: "deepseek-r1", role: "fallback", tokens: 310000, inputTokens: 160000, outputTokens: 116000, requests: 40, costUsd: 3.85, latency: "6.5s" }
+      ],
+      timeseries: [
+        { label: "00", inputTokens: 52000, outputTokens: 30000, requests: 28, costUsd: 1.18 },
+        { label: "04", inputTokens: 64000, outputTokens: 36000, requests: 35, costUsd: 1.42 },
+        { label: "08", inputTokens: 122000, outputTokens: 72000, requests: 62, costUsd: 2.55 },
+        { label: "12", inputTokens: 188000, outputTokens: 108000, requests: 98, costUsd: 3.84 },
+        { label: "16", inputTokens: 216000, outputTokens: 124000, requests: 116, costUsd: 4.44 },
+        { label: "20", inputTokens: 268000, outputTokens: 142000, requests: 141, costUsd: 5.01 }
+      ]
+    },
+    "7d": {
+      totals: {
+        totalTokens: 8420000,
+        inputTokens: 4980000,
+        outputTokens: 2870000,
+        reasoningTokens: 382000,
+        cacheTokens: 188000,
+        requests: 2740,
+        costUsd: 98.6
+      },
+      byModel: [
+        { id: "gpt-oss:120b", role: "primary", tokens: 4680000, inputTokens: 2760000, outputTokens: 1600000, requests: 1720, costUsd: 55.4, latency: "4.3s" },
+        { id: "qwen-coder", role: "fallback", tokens: 2120000, inputTokens: 1320000, outputTokens: 690000, requests: 730, costUsd: 21.8, latency: "1.9s" },
+        { id: "deepseek-r1", role: "fallback", tokens: 1620000, inputTokens: 900000, outputTokens: 580000, requests: 290, costUsd: 21.4, latency: "6.7s" }
+      ],
+      timeseries: [
+        { label: "Mon", inputTokens: 560000, outputTokens: 320000, requests: 300, costUsd: 11.1 },
+        { label: "Tue", inputTokens: 620000, outputTokens: 380000, requests: 350, costUsd: 12.6 },
+        { label: "Wed", inputTokens: 680000, outputTokens: 390000, requests: 390, costUsd: 13.2 },
+        { label: "Thu", inputTokens: 760000, outputTokens: 430000, requests: 430, costUsd: 15.2 },
+        { label: "Fri", inputTokens: 850000, outputTokens: 510000, requests: 485, costUsd: 17.6 },
+        { label: "Sat", inputTokens: 710000, outputTokens: 390000, requests: 385, costUsd: 13.7 },
+        { label: "Sun", inputTokens: 800000, outputTokens: 450000, requests: 400, costUsd: 15.2 }
+      ]
+    },
+    "30d": {
+      totals: {
+        totalTokens: 39200000,
+        inputTokens: 23100000,
+        outputTokens: 13400000,
+        reasoningTokens: 1850000,
+        cacheTokens: 850000,
+        requests: 12480,
+        costUsd: 452.7
+      },
+      byModel: [
+        { id: "gpt-oss:120b", role: "primary", tokens: 20900000, inputTokens: 12400000, outputTokens: 7100000, requests: 7520, costUsd: 246.2, latency: "4.4s" },
+        { id: "qwen-coder", role: "fallback", tokens: 10800000, inputTokens: 6700000, outputTokens: 3500000, requests: 3560, costUsd: 108.8, latency: "1.9s" },
+        { id: "deepseek-r1", role: "fallback", tokens: 7500000, inputTokens: 4000000, outputTokens: 2800000, requests: 1400, costUsd: 97.7, latency: "6.8s" }
+      ],
+      timeseries: [
+        { label: "W1", inputTokens: 4800000, outputTokens: 2700000, requests: 2600, costUsd: 94.1 },
+        { label: "W2", inputTokens: 5600000, outputTokens: 3300000, requests: 3100, costUsd: 113.6 },
+        { label: "W3", inputTokens: 6100000, outputTokens: 3600000, requests: 3380, costUsd: 124.5 },
+        { label: "W4", inputTokens: 6600000, outputTokens: 3800000, requests: 3400, costUsd: 120.5 }
+      ]
+    },
+    all: {
+      totals: {
+        totalTokens: 128600000,
+        inputTokens: 75800000,
+        outputTokens: 43800000,
+        reasoningTokens: 6200000,
+        cacheTokens: 2800000,
+        requests: 40200,
+        costUsd: 1468.9
+      },
+      byModel: [
+        { id: "gpt-oss:120b", role: "primary", tokens: 68800000, inputTokens: 41000000, outputTokens: 23300000, requests: 24800, costUsd: 812.3, latency: "4.5s" },
+        { id: "qwen-coder", role: "fallback", tokens: 34800000, inputTokens: 21600000, outputTokens: 11300000, requests: 11200, costUsd: 345.1, latency: "2.0s" },
+        { id: "deepseek-r1", role: "fallback", tokens: 25000000, inputTokens: 13200000, outputTokens: 9200000, requests: 4200, costUsd: 311.5, latency: "6.9s" }
+      ],
+      timeseries: [
+        { label: "Jan", inputTokens: 8400000, outputTokens: 4800000, requests: 4300, costUsd: 161.2 },
+        { label: "Feb", inputTokens: 11200000, outputTokens: 6500000, requests: 5700, costUsd: 214.6 },
+        { label: "Mar", inputTokens: 15600000, outputTokens: 9100000, requests: 8100, costUsd: 298.4 },
+        { label: "Apr", inputTokens: 18800000, outputTokens: 10800000, requests: 9800, costUsd: 358.1 },
+        { label: "May", inputTokens: 21800000, outputTokens: 12600000, requests: 12300, costUsd: 436.6 }
+      ]
+    }
+  },
+  models: [
+    {
+      id: "gpt-oss:120b",
+      requests: 320,
+      tokens: 800000,
+      inputTokens: 490000,
+      outputTokens: 264000,
+      costUsd: 10.34,
+      latency: "4.2s",
+      share: 52,
+      role: "primary"
+    },
+    {
+      id: "qwen-coder",
+      requests: 120,
+      tokens: 420000,
+      inputTokens: 260000,
+      outputTokens: 132000,
+      costUsd: 4.21,
+      latency: "1.8s",
+      share: 27,
+      role: "fallback"
+    },
+    {
+      id: "deepseek-r1",
+      requests: 40,
+      tokens: 310000,
+      inputTokens: 160000,
+      outputTokens: 116000,
+      costUsd: 3.85,
+      latency: "6.5s",
+      share: 21,
+      role: "fallback"
+    }
+  ]
+};
+
+export const seedApprovals = () => [
+  {
+    id: "exec_request_91",
+    title: "run shell command",
+    risk: "HIGH",
+    meta: "rm -rf /tmp/cache",
+    state: "pending"
+  },
+  {
+    id: "device_pair",
+    title: "new device pairing",
+    risk: "MEDIUM",
+    meta: "chrome / new ip / starman",
+    state: "pending"
+  }
+];
+
+export const mockLogs = [
+  "[10:42:11] gateway.health ok",
+  "[10:42:18] agent.config patched",
+  "[10:42:24] cron.log_monitor failed",
+  "[10:42:31] skill.doc_summarizer updated",
+  "[10:42:48] approval.exec_request_91 pending",
+  "[10:43:02] model.gpt-oss:120b latency 4.2s",
+  "[10:43:11] session.session_4821 running",
+  "[10:43:41] approval.device_pair pending",
+  "[10:44:01] gateway.health ok"
+];

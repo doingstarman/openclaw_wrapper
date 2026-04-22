@@ -1,0 +1,12 @@
+{
+  "name": "openclaw-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm ci --prefix miniapp/server && npm ci --prefix miniapp/web",
+    "test": "npm test --prefix miniapp/server",
+    "build": "npm run build --prefix miniapp/web",
+    "ci": "npm run install:all && npm test && npm run build"
+  }
+}
+
