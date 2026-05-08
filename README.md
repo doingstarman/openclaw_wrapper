@@ -103,3 +103,26 @@ Included:
 3. Verify unauthorized Telegram user receives explicit error.
 4. Verify approval buttons work only for admin-role users.
 5. Verify logs pagination (`Load more`) behaves correctly.
+
+## Docker/VPS deploy
+
+This repo can run as one production container: Express serves `/api/miniapp/*` and the built Vite frontend.
+
+```bash
+cp .env.example .env
+# edit .env: TELEGRAM_BOT_TOKEN, allowed/admin user IDs, gateway settings
+docker compose up -d --build
+```
+
+Default internal app port is `3001`; the compose file binds it to `127.0.0.1:8091` for reverse proxy use.
+
+For a browser-only smoke test before Telegram bot wiring, set:
+
+```env
+MINIAPP_ALLOW_INSECURE_DEV=true
+TELEGRAM_ALLOWED_USER_IDS=
+TELEGRAM_ADMIN_USER_IDS=1037751541
+```
+
+For real Telegram Mini App usage, set `TELEGRAM_BOT_TOKEN` and keep `MINIAPP_ALLOW_INSECURE_DEV=false`.
+

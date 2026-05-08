@@ -1,0 +1,13 @@
+services:
+  web:
+    build: .
+    container_name: openclaw-wrapper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      WEB_DIST_PATH: ../web/dist

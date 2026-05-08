@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+miniapp/server/node_modules
+miniapp/web/node_modules
+miniapp/web/dist
+.env
+npm-debug.log*
+.DS_Store
