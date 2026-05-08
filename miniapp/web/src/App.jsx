@@ -11,24 +11,6 @@ const bottomNavItems = [
   { id: "settings", label: "Настройки", icon: Settings }
 ];
 
-const skillsData = [
-  { id: "log_analyzer", status: "enabled", health: "в норме", updated: "4 мин назад" },
-  { id: "web_search", status: "disabled", health: "нужен API-ключ", updated: "1 час назад" },
-  { id: "doc_summarizer", status: "enabled", health: "в норме", updated: "сегодня" },
-  { id: "telegram_bridge", status: "enabled", health: "в норме", updated: "вчера" }
-];
-
-const cronJobs = [
-  { id: "daily_summary", schedule: "0 9 * * *", last: "success", next: "08:59" },
-  { id: "log_monitor", schedule: "*/10 * * * *", last: "failed", next: "00:08" },
-  { id: "weekly_audit", schedule: "0 8 * * 1", last: "success", next: "Пн 08:00" }
-];
-
-const securityAlerts = [
-  { id: "sec_01", level: "HIGH", text: "запрошен shell exec вне списка разрешений" },
-  { id: "sec_02", level: "MEDIUM", text: "новый браузер запросил привязку устройства" },
-  { id: "sec_03", level: "MEDIUM", text: "cron log_monitor упал 3 раза подряд" }
-];
 
 const statusLabels = {
   "1h": "1 ч",
@@ -247,6 +229,9 @@ export default function App() {
   const canApprove = bootstrap?.permissions?.canApprove === true;
   const userLabel = useMemo(() => getTelegramUserLabel(), []);
   const primaryModel = ai?.models?.find((m) => m.role === "primary");
+  const skillsData = overview?.skills || [];
+  const cronJobs = overview?.cronJobs || [];
+  const securityAlerts = overview?.securityAlerts || [];
   const activeTokenData = ai?.rangeMetrics?.[tokenRange] || ai?.rangeMetrics?.["24h"];
   const activeModels = activeTokenData?.byModel || ai?.models || [];
   const activeTotals = activeTokenData?.totals || ai?.totals || {};

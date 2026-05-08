@@ -8,7 +8,10 @@ export const serializeOverview = (input) => ({
   nearestCron: input.nearestCron,
   primaryModel: input.primaryModel,
   currentEvent: input.currentEvent,
-  operational: input.operational
+  operational: input.operational,
+  securityAlerts: input.securityAlerts || [],
+  skills: input.skills || [],
+  cronJobs: input.cronJobs || []
 });
 
 export const serializeSessions = (sessions) =>

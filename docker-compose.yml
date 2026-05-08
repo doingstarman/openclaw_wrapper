@@ -11,3 +11,6 @@ services:
       NODE_ENV: production
       PORT: 3001
       WEB_DIST_PATH: ../web/dist
+      OPENCLAW_STATE_DIR: /host/openclaw
+    volumes:
+      - /root/.openclaw:/host/openclaw:ro
