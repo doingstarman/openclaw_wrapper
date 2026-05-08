@@ -647,6 +647,29 @@ button:disabled {
   opacity: 0.8;
 }
 
+.empty-state {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(34, 211, 163, 0.42);
+  border-radius: 22px;
+  background: rgba(7, 8, 13, 0.92);
+  color: #d7dbe2;
+}
+
+.empty-state h2 {
+  margin: 0 0 8px;
+  color: #f4f4f5;
+}
+
+.empty-state p {
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.empty-state small {
+  color: #a8afb9;
+}
+
 @media (max-width: 480px) {
   .app {
     padding: 12px 12px 88px;

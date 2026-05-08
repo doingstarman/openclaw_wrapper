@@ -224,6 +224,7 @@ export default function App() {
   const [tokenRange, setTokenRange] = useState("24h");
   const [tokenMetric, setTokenMetric] = useState("tokens");
   const [error, setError] = useState("");
+  const [authMissing, setAuthMissing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const canApprove = bootstrap?.permissions?.canApprove === true;
@@ -323,6 +324,7 @@ export default function App() {
 
   const loadTab = async (tab) => {
     setError("");
+    setAuthMissing(false);
     setLoading(true);
     try {
       if (tab === "overview") {
@@ -353,6 +355,7 @@ export default function App() {
       }
     } catch (err) {
       clientLogger.error("ui.loadTab.failed", { tab, error: err.message });
+      setAuthMissing(err.message === "Missing Telegram initData");
       setError(err.message);
     } finally {
       setLoading(false);
@@ -368,6 +371,7 @@ export default function App() {
         await loadTab("overview");
       } catch (err) {
         clientLogger.error("ui.bootstrap.failed", { error: err.message });
+        setAuthMissing(err.message === "Missing Telegram initData");
         setError(err.message);
       } finally {
         setLoading(false);
@@ -412,7 +416,13 @@ export default function App() {
 
   return (
     <div className="app">
-      {error ? <div className="error">{error}</div> : null}
+      {authMissing ? (
+        <div className="empty-state">
+          <h2>Открой меня из Telegram</h2>
+          <p>Этот пульт проверяет Telegram initData, поэтому прямой браузерный URL без подписи не пускает внутрь.</p>
+          <small>Если это тест в браузере — нужен отдельный dev-режим, но для боевого доступа он выключен специально.</small>
+        </div>
+      ) : error ? <div className="error">{error}</div> : null}
       {loading ? <div className="loading">Загрузка...</div> : null}
 
       <main className="content">
@@ -626,13 +636,14 @@ export default function App() {
 
         {activeTab === "settings" && (
           <div className="stack">
-            <Panel title="Настройки агента">
+            <Panel title="OpenClaw инстанс">
               <div className="kv-list">
-                <div><span>имя агента</span><strong>warframe-operator</strong></div>
-                <div><span>режим политики</span><strong>сбалансированный</strong></div>
-                <div><span>рассуждение</span><strong>адаптивное</strong></div>
-                <div><span>согласования exec</span><StatusPill value="MEDIUM" /></div>
-                <div><span>модель по умолчанию</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+                <div><span>инстанс</span><strong>{overview?.instance || "-"}</strong></div>
+                <div><span>канал</span><strong>{overview?.currentBot || "-"}</strong></div>
+                <div><span>состояние</span><StatusPill value={overview?.status || "unknown"} /></div>
+                <div><span>нагрузка</span><strong>{overview?.workload || "-"}</strong></div>
+                <div><span>модель по умолчанию</span><strong>{overview?.operational?.primaryModel || primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+                <div><span>paired devices</span><strong>{overview?.operational?.pairedDevices ?? "-"}</strong></div>
               </div>
             </Panel>
 
