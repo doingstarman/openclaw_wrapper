@@ -296,12 +296,6 @@ export default function App() {
   );
 
   useEffect(() => {
-    initTelegram().catch((error) => {
-      clientLogger.error("telegram.init.failed", { error: error.message });
-    });
-  }, []);
-
-  useEffect(() => {
     const onWindowError = (event) => {
       clientLogger.error("window.error", {
         message: event.message,
@@ -366,6 +360,7 @@ export default function App() {
     (async () => {
       setLoading(true);
       try {
+        await initTelegram();
         const boot = await api.bootstrap();
         setBootstrap(boot);
         await loadTab("overview");
