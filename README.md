@@ -36,7 +36,8 @@ Recommended:
 
 Optional:
 
-- `OPENCLAW_GATEWAY_URL` and `OPENCLAW_GATEWAY_TOKEN` to read live data
+- `OPENCLAW_STATE_DIR` to read live local OpenClaw state (`/host/openclaw` in Docker)
+- `OPENCLAW_GATEWAY_URL` and `OPENCLAW_GATEWAY_TOKEN` for a future dedicated HTTP bridge
 - `MINIAPP_ALLOW_INSECURE_DEV=true|false` for local testing without Telegram initData
 
 Behavior:
@@ -110,11 +111,12 @@ This repo can run as one production container: Express serves `/api/miniapp/*` a
 
 ```bash
 cp .env.example .env
-# edit .env: TELEGRAM_BOT_TOKEN, allowed/admin user IDs, gateway settings
+# edit .env: TELEGRAM_BOT_TOKEN and allowed/admin user IDs
 docker compose up -d --build
 ```
 
 Default internal app port is `3001`; the compose file binds it to `127.0.0.1:8091` for reverse proxy use.
+The compose file mounts `/root/.openclaw` read-only as `/host/openclaw`, so the mini app shows real OpenClaw sessions, token usage, cron metadata, logs, skills snapshot, Telegram channel status, and local security posture instead of mock data.
 
 For a browser-only smoke test before Telegram bot wiring, set:
 
