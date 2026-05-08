@@ -1,34 +1,50 @@
 export const mockOverview = {
   status: "online",
-  workload: "6 active",
+  workload: "6 активных",
   health: "stable",
   currentBot: "telegram-main",
   instance: "prod-eu-1",
   latestCron: "log_monitor",
   nearestCron: "daily_summary",
-  primaryModel: "gpt-oss:120b"
+  primaryModel: "gpt-oss:120b",
+  currentEvent: {
+    source: "calendar",
+    title: "Созвон по интеграции OpenClaw",
+    detail: "Сегодня 16:30 · подготовить вопросы по gateway, токенам и Telegram-доступу",
+    state: "calendar"
+  },
+  operational: {
+    lastSession: "отчет по стартапам",
+    lastSkill: "анализ логов после ночного cron",
+    latestCron: "проверка стабильности логов",
+    nearestCron: "утренний отчет по агенту",
+    primaryModel: "основная модель для рабочих задач"
+  }
 };
 
 export const mockSessions = [
   {
     id: "session_4821",
+    title: "отчет по стартапам",
     model: "gpt-oss:120b",
     status: "running",
-    last: "analysis completed",
+    last: "анализ завершен",
     tokens: "12.4k"
   },
   {
     id: "session_4820",
+    title: "настройка CLI",
     model: "qwen-coder",
     status: "idle",
-    last: "waiting for command",
+    last: "ожидает команду",
     tokens: "5.2k"
   },
   {
     id: "session_4818",
+    title: "аудит деплоя mini app",
     model: "deepseek-r1",
     status: "paused",
-    last: "pending exec approval",
+    last: "ожидает exec-согласование",
     tokens: "17.9k"
   }
 ];
@@ -110,13 +126,13 @@ export const mockAi = {
         { id: "deepseek-r1", role: "fallback", tokens: 1620000, inputTokens: 900000, outputTokens: 580000, requests: 290, costUsd: 21.4, latency: "6.7s" }
       ],
       timeseries: [
-        { label: "Mon", inputTokens: 560000, outputTokens: 320000, requests: 300, costUsd: 11.1 },
-        { label: "Tue", inputTokens: 620000, outputTokens: 380000, requests: 350, costUsd: 12.6 },
-        { label: "Wed", inputTokens: 680000, outputTokens: 390000, requests: 390, costUsd: 13.2 },
-        { label: "Thu", inputTokens: 760000, outputTokens: 430000, requests: 430, costUsd: 15.2 },
-        { label: "Fri", inputTokens: 850000, outputTokens: 510000, requests: 485, costUsd: 17.6 },
-        { label: "Sat", inputTokens: 710000, outputTokens: 390000, requests: 385, costUsd: 13.7 },
-        { label: "Sun", inputTokens: 800000, outputTokens: 450000, requests: 400, costUsd: 15.2 }
+        { label: "Пн", inputTokens: 560000, outputTokens: 320000, requests: 300, costUsd: 11.1 },
+        { label: "Вт", inputTokens: 620000, outputTokens: 380000, requests: 350, costUsd: 12.6 },
+        { label: "Ср", inputTokens: 680000, outputTokens: 390000, requests: 390, costUsd: 13.2 },
+        { label: "Чт", inputTokens: 760000, outputTokens: 430000, requests: 430, costUsd: 15.2 },
+        { label: "Пт", inputTokens: 850000, outputTokens: 510000, requests: 485, costUsd: 17.6 },
+        { label: "Сб", inputTokens: 710000, outputTokens: 390000, requests: 385, costUsd: 13.7 },
+        { label: "Вс", inputTokens: 800000, outputTokens: 450000, requests: 400, costUsd: 15.2 }
       ]
     },
     "30d": {
@@ -135,10 +151,10 @@ export const mockAi = {
         { id: "deepseek-r1", role: "fallback", tokens: 7500000, inputTokens: 4000000, outputTokens: 2800000, requests: 1400, costUsd: 97.7, latency: "6.8s" }
       ],
       timeseries: [
-        { label: "W1", inputTokens: 4800000, outputTokens: 2700000, requests: 2600, costUsd: 94.1 },
-        { label: "W2", inputTokens: 5600000, outputTokens: 3300000, requests: 3100, costUsd: 113.6 },
-        { label: "W3", inputTokens: 6100000, outputTokens: 3600000, requests: 3380, costUsd: 124.5 },
-        { label: "W4", inputTokens: 6600000, outputTokens: 3800000, requests: 3400, costUsd: 120.5 }
+        { label: "Н1", inputTokens: 4800000, outputTokens: 2700000, requests: 2600, costUsd: 94.1 },
+        { label: "Н2", inputTokens: 5600000, outputTokens: 3300000, requests: 3100, costUsd: 113.6 },
+        { label: "Н3", inputTokens: 6100000, outputTokens: 3600000, requests: 3380, costUsd: 124.5 },
+        { label: "Н4", inputTokens: 6600000, outputTokens: 3800000, requests: 3400, costUsd: 120.5 }
       ]
     },
     all: {
@@ -157,11 +173,11 @@ export const mockAi = {
         { id: "deepseek-r1", role: "fallback", tokens: 25000000, inputTokens: 13200000, outputTokens: 9200000, requests: 4200, costUsd: 311.5, latency: "6.9s" }
       ],
       timeseries: [
-        { label: "Jan", inputTokens: 8400000, outputTokens: 4800000, requests: 4300, costUsd: 161.2 },
-        { label: "Feb", inputTokens: 11200000, outputTokens: 6500000, requests: 5700, costUsd: 214.6 },
-        { label: "Mar", inputTokens: 15600000, outputTokens: 9100000, requests: 8100, costUsd: 298.4 },
-        { label: "Apr", inputTokens: 18800000, outputTokens: 10800000, requests: 9800, costUsd: 358.1 },
-        { label: "May", inputTokens: 21800000, outputTokens: 12600000, requests: 12300, costUsd: 436.6 }
+        { label: "Янв", inputTokens: 8400000, outputTokens: 4800000, requests: 4300, costUsd: 161.2 },
+        { label: "Фев", inputTokens: 11200000, outputTokens: 6500000, requests: 5700, costUsd: 214.6 },
+        { label: "Мар", inputTokens: 15600000, outputTokens: 9100000, requests: 8100, costUsd: 298.4 },
+        { label: "Апр", inputTokens: 18800000, outputTokens: 10800000, requests: 9800, costUsd: 358.1 },
+        { label: "Май", inputTokens: 21800000, outputTokens: 12600000, requests: 12300, costUsd: 436.6 }
       ]
     }
   },
@@ -205,28 +221,28 @@ export const mockAi = {
 export const seedApprovals = () => [
   {
     id: "exec_request_91",
-    title: "run shell command",
+    title: "запуск shell-команды",
     risk: "HIGH",
     meta: "rm -rf /tmp/cache",
     state: "pending"
   },
   {
     id: "device_pair",
-    title: "new device pairing",
+    title: "привязка нового устройства",
     risk: "MEDIUM",
-    meta: "chrome / new ip / starman",
+    meta: "Chrome / новый IP / starman",
     state: "pending"
   }
 ];
 
 export const mockLogs = [
-  "[10:42:11] gateway.health ok",
-  "[10:42:18] agent.config patched",
-  "[10:42:24] cron.log_monitor failed",
-  "[10:42:31] skill.doc_summarizer updated",
-  "[10:42:48] approval.exec_request_91 pending",
-  "[10:43:02] model.gpt-oss:120b latency 4.2s",
-  "[10:43:11] session.session_4821 running",
-  "[10:43:41] approval.device_pair pending",
-  "[10:44:01] gateway.health ok"
+  "[10:42:11] gateway.health в норме",
+  "[10:42:18] agent.config обновлен",
+  "[10:42:24] cron.log_monitor завершился ошибкой",
+  "[10:42:31] skill.doc_summarizer обновлен",
+  "[10:42:48] approval.exec_request_91 ожидает решения",
+  "[10:43:02] model.gpt-oss:120b задержка 4.2с",
+  "[10:43:11] session.session_4821 в работе",
+  "[10:43:41] approval.device_pair ожидает решения",
+  "[10:44:01] gateway.health в норме"
 ];

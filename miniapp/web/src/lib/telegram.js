@@ -26,8 +26,7 @@ export const getTelegramInitData = () => getWebApp()?.initData || "";
 export const getTelegramUserLabel = () => {
   const user = getWebApp()?.initDataUnsafe?.user;
   if (!user) {
-    return "Unknown user";
+    return "Пользователь не определен";
   }
-  return user.username ? `@${user.username}` : String(user.id || "Unknown user");
+  return user.username ? `@${user.username}` : String(user.id || "Пользователь не определен");
 };
-

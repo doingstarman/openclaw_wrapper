@@ -1,37 +1,68 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Activity, BrainCircuit, Gauge, Logs, Workflow } from "lucide-react";
+import { Activity, BrainCircuit, FileText, Gauge, Settings, Workflow } from "lucide-react";
 import { api } from "./api/client";
 import { getTelegramUserLabel, initTelegram } from "./lib/telegram";
 import { clientLogger } from "./lib/logger";
 
 const bottomNavItems = [
-  { id: "overview", label: "Overview", icon: Gauge },
-  { id: "ai", label: "Ai", icon: BrainCircuit },
-  { id: "agent", label: "Agent", icon: Workflow },
-  { id: "logs", label: "Logs", icon: Logs }
+  { id: "overview", label: "Главная", icon: Gauge },
+  { id: "ai", label: "ИИ", icon: BrainCircuit },
+  { id: "agent", label: "Агент", icon: Workflow },
+  { id: "settings", label: "Настройки", icon: Settings }
 ];
 
 const skillsData = [
-  { id: "log_analyzer", status: "enabled", health: "ok", updated: "4 min ago" },
-  { id: "web_search", status: "disabled", health: "api_key required", updated: "1h ago" },
-  { id: "doc_summarizer", status: "enabled", health: "ok", updated: "today" },
-  { id: "telegram_bridge", status: "enabled", health: "ok", updated: "yesterday" }
+  { id: "log_analyzer", status: "enabled", health: "в норме", updated: "4 мин назад" },
+  { id: "web_search", status: "disabled", health: "нужен API-ключ", updated: "1 час назад" },
+  { id: "doc_summarizer", status: "enabled", health: "в норме", updated: "сегодня" },
+  { id: "telegram_bridge", status: "enabled", health: "в норме", updated: "вчера" }
 ];
 
 const cronJobs = [
   { id: "daily_summary", schedule: "0 9 * * *", last: "success", next: "08:59" },
   { id: "log_monitor", schedule: "*/10 * * * *", last: "failed", next: "00:08" },
-  { id: "weekly_audit", schedule: "0 8 * * 1", last: "success", next: "Mon 08:00" }
+  { id: "weekly_audit", schedule: "0 8 * * 1", last: "success", next: "Пн 08:00" }
 ];
 
 const securityAlerts = [
-  { id: "sec_01", level: "HIGH", text: "shell exec requested outside allowlist" },
-  { id: "sec_02", level: "MEDIUM", text: "new browser requested device pairing" },
-  { id: "sec_03", level: "MEDIUM", text: "cron log_monitor failed 3 times" }
+  { id: "sec_01", level: "HIGH", text: "запрошен shell exec вне списка разрешений" },
+  { id: "sec_02", level: "MEDIUM", text: "новый браузер запросил привязку устройства" },
+  { id: "sec_03", level: "MEDIUM", text: "cron log_monitor упал 3 раза подряд" }
 ];
 
+const statusLabels = {
+  "1h": "1 ч",
+  "24h": "24 ч",
+  "7d": "7 д",
+  "30d": "30 д",
+  admin: "админ",
+  all: "все",
+  approved: "одобрено",
+  disabled: "выключен",
+  enabled: "включен",
+  failed: "ошибка",
+  fallback: "резервная",
+  guest: "гость",
+  HIGH: "высокий",
+  idle: "ожидает",
+  live: "живо",
+  calendar: "календарь",
+  MEDIUM: "средний",
+  online: "онлайн",
+  paused: "пауза",
+  pending: "ожидает",
+  primary: "основная",
+  rejected: "отклонено",
+  running: "в работе",
+  stable: "стабильно",
+  success: "успех",
+  viewer: "просмотр"
+};
+
+const displayStatus = (value) => statusLabels[String(value)] || value;
+
 const StatusPill = ({ value }) => (
-  <span className={`pill pill-${String(value).toLowerCase()}`}>{value}</span>
+  <span className={`pill pill-${String(value).toLowerCase()}`}>{displayStatus(value)}</span>
 );
 
 const Panel = ({ title, right, children }) => (
@@ -53,11 +84,14 @@ const typeColors = {
 };
 
 const metricOptions = [
-  { id: "tokens", label: "Tokens" },
-  { id: "cost", label: "Cost" },
-  { id: "requests", label: "Requests" },
-  { id: "io", label: "Input/Output" }
+  { id: "tokens", label: "Токены" },
+  { id: "cost", label: "Стоимость" },
+  { id: "requests", label: "Запросы" },
+  { id: "io", label: "Ввод/вывод" }
 ];
+
+const rangeOptions = (ranges = ["1h", "24h", "7d", "30d", "all"]) =>
+  ranges.map((id) => ({ id, label: displayStatus(id) }));
 
 const compactNumber = (value) => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`;
@@ -197,7 +231,6 @@ const StackedBars = ({ points }) => {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [agentPanel, setAgentPanel] = useState("main");
   const [bootstrap, setBootstrap] = useState(null);
   const [overview, setOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
@@ -217,6 +250,34 @@ export default function App() {
   const activeTokenData = ai?.rangeMetrics?.[tokenRange] || ai?.rangeMetrics?.["24h"];
   const activeModels = activeTokenData?.byModel || ai?.models || [];
   const activeTotals = activeTokenData?.totals || ai?.totals || {};
+  const metricName = metricOptions.find((item) => item.id === tokenMetric)?.label || "Токены";
+  const currentEvent = useMemo(() => {
+    if (overview?.currentEvent) {
+      return {
+        label: "Сейчас в календаре",
+        title: overview.currentEvent.title,
+        detail: overview.currentEvent.detail,
+        state: overview.currentEvent.state || overview.currentEvent.source || "calendar"
+      };
+    }
+
+    const runningSession = sessions.find((session) => session.status === "running");
+    if (runningSession) {
+      return {
+        label: "Активная работа",
+        title: runningSession.id,
+        detail: `${runningSession.last} · ${runningSession.tokens} токенов`,
+        state: runningSession.status
+      };
+    }
+
+    return {
+      label: "Состояние OpenClaw",
+      title: "Система работает штатно",
+      detail: `${overview?.workload || "нет активной нагрузки"} · ${overview?.currentBot || "бот не выбран"}`,
+      state: overview?.health || "stable"
+    };
+  }, [approvals, overview, sessions]);
   const roleBreakdown = useMemo(() => {
     const primary = activeModels
       .filter((model) => model.role === "primary")
@@ -225,8 +286,8 @@ export default function App() {
       .filter((model) => model.role === "fallback")
       .reduce((sum, model) => sum + metricValue(model, tokenMetric), 0);
     return [
-      { label: "primary", value: primary, color: "#22d3a3" },
-      { label: "fallback", value: fallback, color: "#60a5fa" }
+      { label: "основная", value: primary, color: "#22d3a3" },
+      { label: "резервные", value: fallback, color: "#60a5fa" }
     ];
   }, [activeModels, tokenMetric]);
   const modelBreakdown = useMemo(
@@ -240,10 +301,10 @@ export default function App() {
   );
   const typeBreakdown = useMemo(
     () => [
-      { label: "input", value: activeTotals.inputTokens || 0, color: typeColors.inputTokens },
-      { label: "output", value: activeTotals.outputTokens || 0, color: typeColors.outputTokens },
-      { label: "reasoning", value: activeTotals.reasoningTokens || 0, color: typeColors.reasoningTokens },
-      { label: "cache", value: activeTotals.cacheTokens || 0, color: typeColors.cacheTokens }
+      { label: "ввод", value: activeTotals.inputTokens || 0, color: typeColors.inputTokens },
+      { label: "вывод", value: activeTotals.outputTokens || 0, color: typeColors.outputTokens },
+      { label: "рассуждение", value: activeTotals.reasoningTokens || 0, color: typeColors.reasoningTokens },
+      { label: "кэш", value: activeTotals.cacheTokens || 0, color: typeColors.cacheTokens }
     ],
     [activeTotals]
   );
@@ -292,12 +353,18 @@ export default function App() {
         setAi(aiData);
       }
       if (tab === "ai") setAi(await api.ai());
-      if (tab === "agent") setApprovals((await api.approvals()).items || []);
+      if (tab === "agent") {
+        const approvalsData = await api.approvals();
+        setApprovals(approvalsData.items || []);
+      }
       if (tab === "logs") {
-        const page = await api.logs("0");
-        setLogs(page.items || []);
-        setLogsCursor(page.nextCursor || "0");
-        setHasMoreLogs(Boolean(page.hasMore));
+        const logsData = await api.logs("0");
+        setLogs(logsData.items || []);
+        setLogsCursor(logsData.nextCursor || "0");
+        setHasMoreLogs(Boolean(logsData.hasMore));
+      }
+      if (tab === "settings") {
+        if (!ai) setAi(await api.ai());
       }
     } catch (err) {
       clientLogger.error("ui.loadTab.failed", { tab, error: err.message });
@@ -325,10 +392,12 @@ export default function App() {
 
   const onTabClick = async (tab) => {
     setActiveTab(tab);
-    if (tab !== "agent") {
-      setAgentPanel("main");
-    }
     await loadTab(tab);
+  };
+
+  const openLogs = async () => {
+    setActiveTab("logs");
+    await loadTab("logs");
   };
 
   const onApproveAction = async (id, action) => {
@@ -358,63 +427,67 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div>
-          <div className="eyebrow">Openclaw Pocket Console</div>
-          <h1>Telegram Mini App</h1>
-        </div>
-        <div className="meta">
-          <div>{userLabel}</div>
-          <StatusPill value={bootstrap?.role || "guest"} />
-        </div>
-      </header>
-
       {error ? <div className="error">{error}</div> : null}
-      {loading ? <div className="loading">Loading...</div> : null}
+      {loading ? <div className="loading">Загрузка...</div> : null}
 
       <main className="content">
         {activeTab === "overview" && overview && (
           <div className="stack">
+            <section className="event-banner">
+              <div className="event-banner-top">
+                <span>{currentEvent.label}</span>
+                <StatusPill value={currentEvent.state} />
+              </div>
+              <div>
+                <h2>{currentEvent.title}</h2>
+                <p>{currentEvent.detail}</p>
+              </div>
+              <div className="event-banner-foot">
+                <span>Инстанс: {overview.instance}</span>
+                <span>{overview.currentBot}</span>
+              </div>
+            </section>
+
             <Panel
-              title="System Status"
+              title="Статус системы"
               right={
                 <div className="subtle subtle-icon">
                   <Activity size={14} />
-                  <span>healthy</span>
+                  <span>здорово</span>
                 </div>
               }
             >
               <div className="card-grid">
                 <article className="card">
-                  <h4>Status</h4>
-                  <p>{overview.status}</p>
+                  <h4>Статус</h4>
+                  <p>{displayStatus(overview.status)}</p>
                 </article>
                 <article className="card">
-                  <h4>Workload</h4>
+                  <h4>Нагрузка</h4>
                   <p>{overview.workload}</p>
                 </article>
                 <article className="card">
-                  <h4>Health</h4>
-                  <p>{overview.health}</p>
+                  <h4>Здоровье</h4>
+                  <p>{displayStatus(overview.health)}</p>
                 </article>
                 <article className="card">
-                  <h4>Current bot</h4>
+                  <h4>Текущий бот</h4>
                   <p>{overview.currentBot}</p>
                 </article>
               </div>
             </Panel>
 
-            <Panel title="Operational Snapshot">
+            <Panel title="Операционный срез">
               <div className="kv-list">
-                <div><span>last session</span><strong>{sessions[0]?.id || "-"}</strong></div>
-                <div><span>last updated skill</span><strong>{skillsData[0]?.id}</strong></div>
-                <div><span>latest cron run</span><strong>{overview.latestCron}</strong></div>
-                <div><span>nearest cron job</span><strong>{overview.nearestCron}</strong></div>
-                <div><span>primary model</span><strong>{primaryModel?.id || overview.primaryModel}</strong></div>
+                <div><span>последняя сессия</span><strong>{overview.operational?.lastSession || sessions[0]?.title || "-"}</strong></div>
+                <div><span>последний навык</span><strong>{overview.operational?.lastSkill || skillsData[0]?.id}</strong></div>
+                <div><span>последний cron</span><strong>{overview.operational?.latestCron || overview.latestCron}</strong></div>
+                <div><span>ближайший cron</span><strong>{overview.operational?.nearestCron || overview.nearestCron}</strong></div>
+                <div><span>основная модель</span><strong>{overview.operational?.primaryModel || primaryModel?.id || overview.primaryModel}</strong></div>
               </div>
             </Panel>
 
-            <Panel title="Security & Warnings" right={<StatusPill value={String(securityAlerts.length)} />}>
+            <Panel title="Безопасность и предупреждения" right={<StatusPill value={String(securityAlerts.length)} />}>
               <div className="list">
                 {securityAlerts.map((alert) => (
                   <article key={alert.id} className="list-item">
@@ -429,55 +502,55 @@ export default function App() {
 
         {activeTab === "ai" && ai && (
           <div className="stack">
-            <Panel title="Context Tokens" right={<StatusPill value={tokenRange} />}>
+            <Panel title="Токены контекста" right={<StatusPill value={tokenRange} />}>
               <div className="dashboard-controls">
-                <SegmentControl items={ai.ranges || ["1h", "24h", "7d", "30d", "all"]} value={tokenRange} onChange={setTokenRange} />
+                <SegmentControl items={rangeOptions(ai.ranges)} value={tokenRange} onChange={setTokenRange} />
                 <SegmentControl items={metricOptions} value={tokenMetric} onChange={setTokenMetric} />
               </div>
               <div className="model-strip">
                 <article>
-                  <span>Primary model</span>
+                  <span>Основная модель</span>
                   <strong>{ai.primaryModel || primaryModel?.id}</strong>
                 </article>
                 <article>
-                  <span>Fallback models</span>
+                  <span>Резервные модели</span>
                   <strong>{(ai.fallbackModels || []).join(", ")}</strong>
                 </article>
               </div>
               <div className="card-grid">
                 <article className="card">
-                  <h4>Total tokens</h4>
+                  <h4>Всего токенов</h4>
                   <p>{compactNumber(activeTotals.totalTokens || 0)}</p>
                 </article>
                 <article className="card">
-                  <h4>Cost</h4>
+                  <h4>Стоимость</h4>
                   <p>{money(activeTotals.costUsd || 0)}</p>
                 </article>
                 <article className="card">
-                  <h4>Requests</h4>
+                  <h4>Запросы</h4>
                   <p>{compactNumber(activeTotals.requests || 0)}</p>
                 </article>
                 <article className="card">
-                  <h4>Output</h4>
+                  <h4>Вывод</h4>
                   <p>{compactNumber(activeTotals.outputTokens || 0)}</p>
                 </article>
               </div>
             </Panel>
 
             <div className="chart-grid">
-              <Panel title="By Model">
-                <DonutChart items={modelBreakdown} center={tokenMetric === "cost" ? "cost" : tokenMetric} format={(value) => metricLabel(value, tokenMetric)} />
+              <Panel title="По моделям">
+                <DonutChart items={modelBreakdown} center={metricName} format={(value) => metricLabel(value, tokenMetric)} />
               </Panel>
-              <Panel title="Primary / Fallback">
-                <DonutChart items={roleBreakdown} center="roles" format={(value) => metricLabel(value, tokenMetric)} />
+              <Panel title="Основная / резервные">
+                <DonutChart items={roleBreakdown} center="роли" format={(value) => metricLabel(value, tokenMetric)} />
               </Panel>
             </div>
 
-            <Panel title="Token Type">
-              <DonutChart items={typeBreakdown} center="types" />
+            <Panel title="Тип токенов">
+              <DonutChart items={typeBreakdown} center="типы" />
             </Panel>
 
-            <Panel title="Trend">
+            <Panel title="Динамика">
               {tokenMetric === "io" ? (
                 <StackedBars points={activeTokenData?.timeseries || []} />
               ) : (
@@ -485,7 +558,7 @@ export default function App() {
               )}
             </Panel>
 
-            <Panel title="Models Analytics">
+            <Panel title="Аналитика моделей">
               <div className="list">
                 {activeModels.map((m, index) => {
                   const modelValue = metricValue(m, tokenMetric);
@@ -495,7 +568,7 @@ export default function App() {
                       <div className="analytics-head">
                         <div>
                           <strong>{m.id}</strong>
-                          <small>{m.requests} requests / {m.latency}</small>
+                          <small>{m.requests} запросов / задержка {(m.latency || "-").replace("s", "с")}</small>
                         </div>
                         <StatusPill value={m.role} />
                       </div>
@@ -522,95 +595,38 @@ export default function App() {
 
         {activeTab === "agent" && (
           <div className="stack">
-            {agentPanel === "main" && (
-              <>
-                <Panel title="Agent Control">
-                  <div className="kv-list">
-                    <div><span>agent name</span><strong>warframe-operator</strong></div>
-                    <div><span>policy mode</span><strong>balanced</strong></div>
-                    <div><span>reasoning</span><strong>adaptive</strong></div>
-                    <div><span>exec approvals</span><StatusPill value="MEDIUM" /></div>
-                    <div><span>default model</span><strong>{primaryModel?.id || "-"}</strong></div>
-                  </div>
-                </Panel>
-                <Panel title="Agent Menus">
-                  <div className="menu-grid">
-                    <button onClick={() => setAgentPanel("skills")}>Skills ({skillsData.length})</button>
-                    <button onClick={() => setAgentPanel("cron")}>Cron Jobs ({cronJobs.length})</button>
-                  </div>
-                </Panel>
-                <Panel title="Pending Approvals" right={<StatusPill value={String(approvals.length)} />}>
-                  <div className="list">
-                    {approvals.map((a) => (
-                      <article key={a.id} className="list-item approval-item">
-                        <div>
-                          <strong>{a.id}</strong>
-                          <div>{a.title}</div>
-                          <small>{a.meta}</small>
-                        </div>
-                        <div className="approval-actions">
-                          <StatusPill value={a.risk} />
-                          <StatusPill value={a.state} />
-                          <button disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "approve")}>Approve</button>
-                          <button disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "reject")}>Reject</button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </Panel>
-              </>
-            )}
-
-            {agentPanel === "skills" && (
-              <Panel title="Skills" right={<button onClick={() => setAgentPanel("main")}>Back</button>}>
-                <div className="list">
-                  {skillsData.map((s) => (
-                    <article key={s.id} className="list-item">
-                      <div>
-                        <strong>{s.id}</strong>
-                        <small>health: {s.health} | updated: {s.updated}</small>
-                      </div>
-                      <StatusPill value={s.status} />
-                    </article>
-                  ))}
-                </div>
-              </Panel>
-            )}
-
-            {agentPanel === "cron" && (
-              <Panel title="Cron Jobs" right={<button onClick={() => setAgentPanel("main")}>Back</button>}>
-                <div className="list">
-                  {cronJobs.map((job) => (
-                    <article key={job.id} className="list-item">
-                      <div>
-                        <strong>{job.id}</strong>
-                        <small>{job.schedule}</small>
-                      </div>
-                      <div className="right-col">
-                        <StatusPill value={job.last} />
-                        <small>{job.next}</small>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </Panel>
-            )}
-          </div>
-        )}
-
-        {activeTab === "logs" && (
-          <div className="stack">
-            <Panel title="Logs Feed" right={<StatusPill value="live" />}>
-              <div className="list">
-                {logs.map((line, idx) => (
-                  <article key={`${line}-${idx}`} className="list-item mono">{line}</article>
-                ))}
-                <button className="full" disabled={!hasMoreLogs} onClick={loadMoreLogs}>
-                  {hasMoreLogs ? "Load more" : "No more logs"}
-                </button>
+            <Panel title="Работа агента">
+              <div className="kv-list">
+                <div><span>активная сессия</span><strong>{sessions.find((item) => item.status === "running")?.title || "-"}</strong></div>
+                <div><span>основная модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+                <div><span>ожидают решения</span><strong>{approvals.filter((item) => item.state === "pending").length}</strong></div>
+                <div><span>режим доступа</span><StatusPill value={bootstrap?.role || "guest"} /></div>
               </div>
             </Panel>
-            <Panel title="Security Warnings">
+
+            <Panel title="Согласования" right={<StatusPill value={String(approvals.length)} />}>
+              <div className="list">
+                {approvals.map((a) => (
+                  <article key={a.id} className="list-item approval-item">
+                    <div>
+                      <strong>{a.id}</strong>
+                      <div>{a.title}</div>
+                      <small>{a.meta}</small>
+                    </div>
+                    <div className="approval-meta">
+                      <StatusPill value={a.risk} />
+                      <StatusPill value={a.state} />
+                      <div className="approval-actions">
+                        <button className="approve-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "approve")}>Одобрить</button>
+                        <button className="reject-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "reject")}>Отклонить</button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Предупреждения безопасности">
               <div className="list">
                 {securityAlerts.map((alert) => (
                   <article key={alert.id} className="list-item">
@@ -618,6 +634,82 @@ export default function App() {
                     <StatusPill value={alert.level} />
                   </article>
                 ))}
+              </div>
+            </Panel>
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="stack">
+            <Panel title="Настройки агента">
+              <div className="kv-list">
+                <div><span>имя агента</span><strong>warframe-operator</strong></div>
+                <div><span>режим политики</span><strong>сбалансированный</strong></div>
+                <div><span>рассуждение</span><strong>адаптивное</strong></div>
+                <div><span>согласования exec</span><StatusPill value="MEDIUM" /></div>
+                <div><span>модель по умолчанию</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+              </div>
+            </Panel>
+
+            <Panel title="Журнал работы">
+              <button className="full menu-action" onClick={openLogs}>
+                <FileText size={16} />
+                <span>Открыть ленту логов</span>
+              </button>
+            </Panel>
+
+            <Panel title="Навыки">
+              <div className="list">
+                {skillsData.map((s) => (
+                  <article key={s.id} className="list-item">
+                    <div>
+                      <strong>{s.id}</strong>
+                      <small>здоровье: {s.health} | обновлен: {s.updated}</small>
+                    </div>
+                    <StatusPill value={s.status} />
+                  </article>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Расписание cron">
+              <div className="list">
+                {cronJobs.map((job) => (
+                  <article key={job.id} className="list-item">
+                    <div>
+                      <strong>{job.id}</strong>
+                      <small>{job.schedule}</small>
+                    </div>
+                    <div className="right-col">
+                      <StatusPill value={job.last} />
+                      <small>{job.next}</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Доступ Telegram">
+              <div className="kv-list">
+                <div><span>пользователь</span><strong>{userLabel}</strong></div>
+                <div><span>роль</span><StatusPill value={bootstrap?.role || "guest"} /></div>
+                <div><span>право согласования</span><strong>{canApprove ? "есть" : "нет"}</strong></div>
+                <div><span>запись согласований</span><strong>{bootstrap?.features?.approvalsWritable ? "включена" : "выключена"}</strong></div>
+              </div>
+            </Panel>
+          </div>
+        )}
+
+        {activeTab === "logs" && (
+          <div className="stack">
+            <Panel title="Лента логов" right={<StatusPill value="live" />}>
+              <div className="list">
+                {logs.map((line, idx) => (
+                  <article key={`${line}-${idx}`} className="list-item mono">{line}</article>
+                ))}
+                <button className="full" disabled={!hasMoreLogs} onClick={loadMoreLogs}>
+                  {hasMoreLogs ? "Загрузить еще" : "Логов больше нет"}
+                </button>
               </div>
             </Panel>
           </div>

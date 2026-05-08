@@ -6,12 +6,15 @@ export const serializeOverview = (input) => ({
   instance: input.instance,
   latestCron: input.latestCron,
   nearestCron: input.nearestCron,
-  primaryModel: input.primaryModel
+  primaryModel: input.primaryModel,
+  currentEvent: input.currentEvent,
+  operational: input.operational
 });
 
 export const serializeSessions = (sessions) =>
   sessions.map((s) => ({
     id: s.id,
+    title: s.title,
     model: s.model,
     status: s.status,
     last: s.last,

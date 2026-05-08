@@ -79,7 +79,7 @@ export const createMiniappRouter = ({ config, dataSource }) => {
       role: req.auth.access.role,
       permissions: req.auth.access.permissions,
       features: {
-        tabs: ["overview", "sessions", "ai", "approvals", "logs"],
+        tabs: ["overview", "ai", "agent", "settings", "logs"],
         approvalsWritable: req.auth.access.permissions.canApprove
       },
       gateway: bootstrap

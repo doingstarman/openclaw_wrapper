@@ -11,7 +11,9 @@ describe("miniapp serializers", () => {
       instance: "dev",
       latestCron: "none",
       nearestCron: "none",
-      primaryModel: "gpt"
+      primaryModel: "gpt",
+      currentEvent: { title: "event" },
+      operational: { lastSession: "session" }
     });
     expect(result).toEqual({
       status: "online",
@@ -21,7 +23,9 @@ describe("miniapp serializers", () => {
       instance: "dev",
       latestCron: "none",
       nearestCron: "none",
-      primaryModel: "gpt"
+      primaryModel: "gpt",
+      currentEvent: { title: "event" },
+      operational: { lastSession: "session" }
     });
   });
 
@@ -41,4 +45,3 @@ describe("miniapp serializers", () => {
     expect(page).toEqual({ items: ["x"], nextCursor: "1", hasMore: true });
   });
 });
-
