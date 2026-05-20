@@ -43,6 +43,28 @@ export const serializeAi = (ai) => ({
   }))
 });
 
+export const serializeSkills = (skills) =>
+  skills.map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    status: skill.status,
+    health: skill.health,
+    source: skill.source,
+    installedAt: skill.installedAt,
+    lastRunAt: skill.lastRunAt,
+    lastResult: skill.lastResult,
+    version: skill.version,
+    runs: skill.runs,
+    triggers: skill.triggers || [],
+    dependencies: skill.dependencies || []
+  }));
+
+export const serializeSkillDetail = (skill) => ({
+  ...serializeSkills([skill])[0],
+  logs: skill.logs || []
+});
+
 export const serializeApprovals = (approvals) =>
   approvals.map((a) => ({
     id: a.id,

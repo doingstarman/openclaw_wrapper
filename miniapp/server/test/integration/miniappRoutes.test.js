@@ -68,5 +68,38 @@ describe("miniapp routes", () => {
     expect(Array.isArray(logs.body.items)).toBe(true);
     expect(typeof logs.body.nextCursor).toBe("string");
   });
-});
 
+  it("returns skills and handles local skill actions", async () => {
+    const app = createApp({
+      telegramBotToken: BOT_TOKEN,
+      allowedUserIds: new Set(["42"]),
+      adminUserIds: new Set(["42"])
+    });
+    const initData = signInitData({
+      authDate: Math.floor(Date.now() / 1000),
+      user: { id: 42, username: "admin" }
+    });
+
+    const skills = await request(app)
+      .get("/api/miniapp/skills")
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(skills.body.items.length).toBeGreaterThan(0);
+
+    const skillId = skills.body.items[0].id;
+    const detail = await request(app)
+      .get(`/api/miniapp/skills/${skillId}`)
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(detail.body.item.id).toBe(skillId);
+
+    const checked = await request(app)
+      .post(`/api/miniapp/skills/${skillId}/check`)
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(checked.body.item.lastRunAt).toBeTruthy();
+  });
+});

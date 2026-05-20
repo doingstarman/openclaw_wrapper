@@ -6,6 +6,8 @@ import { validateTelegramInitData } from "../security/telegramInitData.js";
 import {
   serializeAi,
   serializeApprovals,
+  serializeSkillDetail,
+  serializeSkills,
   serializeLogsPage,
   serializeOverview,
   serializeSessions
@@ -96,6 +98,30 @@ export const createMiniappRouter = ({ config, dataSource }) => {
 
   router.get("/ai", asyncRoute(async (_req, res) => {
     res.json(serializeAi(await dataSource.getAi()));
+  }));
+
+  router.get("/skills", asyncRoute(async (_req, res) => {
+    res.json({ items: serializeSkills(await dataSource.getSkills()) });
+  }));
+
+  router.get("/skills/:id", asyncRoute(async (req, res) => {
+    const item = await dataSource.getSkill(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: "Skill not found" });
+    }
+    return res.json({ item: serializeSkillDetail(item) });
+  }));
+
+  router.post("/skills/:id/:action", asyncRoute(async (req, res) => {
+    const { id, action } = req.params;
+    if (!["enable", "disable", "check"].includes(action)) {
+      return res.status(400).json({ error: "Unsupported skill action" });
+    }
+    const item = await dataSource.updateSkill(id, action, req.auth.user.id);
+    if (!item) {
+      return res.status(404).json({ error: "Skill not found" });
+    }
+    return res.json({ item: serializeSkillDetail(item) });
   }));
 
   router.get("/approvals", asyncRoute(async (_req, res) => {

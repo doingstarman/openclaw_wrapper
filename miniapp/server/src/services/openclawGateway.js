@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { mockAi, mockLogs, mockOverview, mockSessions, seedApprovals } from "../data/mockData.js";
+import { mockAi, mockLogs, mockOverview, mockSessions, mockSkills, seedApprovals } from "../data/mockData.js";
 import { logger } from "../logger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -166,7 +166,22 @@ const loadOpenClawState = async (stateDir) => {
 
   const skills = Object.values(sessionsObject || {})[0]?.skillsSnapshot?.skills || [];
   const skillItems = Array.isArray(skills)
-    ? skills.slice(0, 8).map((skill) => ({ id: skill.name || skill.id || "skill", status: "enabled", health: "доступен", updated: "из снапшота" }))
+    ? skills.slice(0, 24).map((skill, index) => ({
+        id: skill.name || skill.id || `skill_${index + 1}`,
+        name: skill.displayName || skill.name || skill.id || `Навык ${index + 1}`,
+        description: skill.description || "Навык найден в локальном snapshot OpenClaw.",
+        status: skill.disabled ? "inactive" : "active",
+        health: "ok",
+        source: skill.source || "snapshot",
+        installedAt: skill.installedAt || null,
+        lastRunAt: skill.lastRunAt || null,
+        lastResult: skill.lastResult || "unknown",
+        version: skill.version || "-",
+        runs: Number(skill.runs || 0),
+        triggers: skill.triggers || [],
+        dependencies: skill.dependencies || [],
+        logs: [`Навык ${skill.name || skill.id || index + 1} загружен из snapshot OpenClaw`]
+      }))
     : [];
 
   const overview = {
@@ -264,6 +279,7 @@ const loadOpenClawState = async (stateDir) => {
 
 export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayToken, requestTimeoutMs }) => {
   const approvals = seedApprovals();
+  const skills = mockSkills.map((skill) => ({ ...skill, logs: [...(skill.logs || [])] }));
   const logs = [...mockLogs];
   const stateDir = process.env.OPENCLAW_STATE_DIR || "/host/openclaw";
 
@@ -350,6 +366,33 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
     getOverview: async () => (await safeState())?.overview || safeGatewayRead("/api/miniapp/overview", mockOverview),
     getSessions: async () => (await safeState())?.sessions || safeGatewayRead("/api/miniapp/sessions", mockSessions),
     getAi: async () => (await safeState())?.ai || safeGatewayRead("/api/miniapp/ai", mockAi),
+    getSkills: async () => (await safeState())?.overview?.skills || safeGatewayRead("/api/miniapp/skills", skills),
+    getSkill: async (skillId) => {
+      const stateSkill = (await safeState())?.overview?.skills.find((skill) => skill.id === skillId);
+      if (stateSkill) return stateSkill;
+      const fallbackSkills = await safeGatewayRead("/api/miniapp/skills", skills);
+      return fallbackSkills.find((skill) => skill.id === skillId) || null;
+    },
+    updateSkill: async (skillId, action, actorId) => {
+      const item = skills.find((skill) => skill.id === skillId);
+      if (!item) return null;
+      if (action === "enable") {
+        item.status = "active";
+        item.health = item.health === "missing_key" ? "needs_config" : "ok";
+      }
+      if (action === "disable") item.status = "inactive";
+      if (action === "check") {
+        item.lastRunAt = new Date().toISOString();
+        item.lastResult = item.status === "needs_config" ? "not_configured" : "success";
+        item.runs = Number(item.runs || 0) + 1;
+        item.logs = [
+          `[${new Date().toISOString()}] проверка запущена пользователем ${actorId}`,
+          ...(item.logs || [])
+        ].slice(0, 8);
+      }
+      logs.unshift(`[${new Date().toISOString()}] skill.${skillId} ${action} by ${actorId}`);
+      return item;
+    },
     getApprovals: async () => (await safeState())?.approvals || safeGatewayRead("/api/miniapp/approvals", approvals),
     approve: async (approvalId, action, actorId) => {
       const item = approvals.find((a) => a.id === approvalId) || (await safeState())?.approvals.find((a) => a.id === approvalId);
