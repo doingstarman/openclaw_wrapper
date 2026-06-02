@@ -8,10 +8,7 @@ export const serializeOverview = (input) => ({
   nearestCron: input.nearestCron,
   primaryModel: input.primaryModel,
   currentEvent: input.currentEvent,
-  operational: input.operational,
-  securityAlerts: input.securityAlerts || [],
-  skills: input.skills || [],
-  cronJobs: input.cronJobs || []
+  operational: input.operational
 });
 
 export const serializeSessions = (sessions) =>
@@ -43,28 +40,6 @@ export const serializeAi = (ai) => ({
   }))
 });
 
-export const serializeSkills = (skills) =>
-  skills.map((skill) => ({
-    id: skill.id,
-    name: skill.name,
-    description: skill.description,
-    status: skill.status,
-    health: skill.health,
-    source: skill.source,
-    installedAt: skill.installedAt,
-    lastRunAt: skill.lastRunAt,
-    lastResult: skill.lastResult,
-    version: skill.version,
-    runs: skill.runs,
-    triggers: skill.triggers || [],
-    dependencies: skill.dependencies || []
-  }));
-
-export const serializeSkillDetail = (skill) => ({
-  ...serializeSkills([skill])[0],
-  logs: skill.logs || []
-});
-
 export const serializeApprovals = (approvals) =>
   approvals.map((a) => ({
     id: a.id,
@@ -79,22 +54,3 @@ export const serializeLogsPage = ({ items, nextCursor, hasMore }) => ({
   nextCursor,
   hasMore
 });
-
-export const serializeSubagents = (subagents) =>
-  subagents.map((item) => ({
-    id: item.id,
-    label: item.label,
-    task: item.task,
-    status: item.status,
-    outcome: item.outcome,
-    requesterSessionKey: item.requesterSessionKey,
-    childSessionKey: item.childSessionKey,
-    model: item.model,
-    thinking: item.thinking,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-    summary: item.summary,
-    nextEvent: item.nextEvent,
-    nextEventAt: item.nextEventAt,
-    lastAction: item.lastAction || null
-  }));

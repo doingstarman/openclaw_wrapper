@@ -13,10 +13,7 @@ describe("miniapp serializers", () => {
       nearestCron: "none",
       primaryModel: "gpt",
       currentEvent: { title: "event" },
-      operational: { lastSession: "session" },
-      securityAlerts: [{ id: "a" }],
-      skills: [{ id: "skill" }],
-      cronJobs: [{ id: "cron" }]
+      operational: { lastSession: "session" }
     });
     expect(result).toEqual({
       status: "online",
@@ -28,10 +25,7 @@ describe("miniapp serializers", () => {
       nearestCron: "none",
       primaryModel: "gpt",
       currentEvent: { title: "event" },
-      operational: { lastSession: "session" },
-      securityAlerts: [{ id: "a" }],
-      skills: [{ id: "skill" }],
-      cronJobs: [{ id: "cron" }]
+      operational: { lastSession: "session" }
     });
   });
 
