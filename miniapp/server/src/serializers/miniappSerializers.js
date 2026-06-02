@@ -94,5 +94,7 @@ export const serializeSubagents = (subagents) =>
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     summary: item.summary,
+    nextEvent: item.nextEvent,
+    nextEventAt: item.nextEventAt,
     lastAction: item.lastAction || null
   }));

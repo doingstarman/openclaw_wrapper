@@ -108,41 +108,30 @@ const sessionTitle = async (stateDir, session) => {
   };
 };
 
-const subagentStatus = (value = {}) => {
-  if (value.abortedLastRun) return "killed";
-  if (value.status === "running") return "running";
-  if (value.status === "failed") return "failed";
-  if (value.status === "timeout" || value.timedOut) return "timed_out";
-  return value.status || "completed";
+const buildCalendarSubagent = (state = null) => {
+  const event = state?.overview?.currentEvent;
+  return {
+    id: "calendar_manager",
+    label: "Агент управления календарём",
+    task: "Следит за расписанием, ближайшими событиями и напоминаниями",
+    status: "running",
+    outcome: null,
+    requesterSessionKey: "agent:main:telegram:direct:1037751541",
+    childSessionKey: "agent:main:subagent:calendar-manager",
+    model: state?.overview?.operational?.primaryModel || state?.overview?.primaryModel || "default",
+    thinking: "medium",
+    createdAt: Date.now() - 1000 * 60 * 60 * 6,
+    updatedAt: Date.now() - 1000 * 60 * 12,
+    summary: event?.detail || "Календарь под наблюдением. Готов подсветить ближайшие события и конфликты.",
+    nextEvent: event?.title || "нет ближайшего события",
+    nextEventAt: event?.detail?.split("·")?.[0]?.trim() || "неизвестно",
+    lastAction: null
+  };
 };
 
 const loadSubagentsFromState = async (stateDir) => {
-  const sessionsPath = path.join(stateDir, "agents/main/sessions/sessions.json");
-  const sessionsObject = await readJson(sessionsPath, {});
-  const items = await Promise.all(
-    Object.entries(sessionsObject || {})
-      .filter(([key]) => key.includes(":subagent:"))
-      .map(async ([key, value]) => {
-        const meta = await sessionTitle(stateDir, { ...value, key });
-        const status = subagentStatus(value);
-        return {
-          id: value.runId || value.taskId || key,
-          label: value.label || meta.title || key.split(":").pop(),
-          task: meta.title || value.task || "Subagent task",
-          status,
-          outcome: value.terminalOutcome || (status === "completed" ? "success" : null),
-          requesterSessionKey: value.requesterSessionKey || value.parentSessionKey || "agent:main:main",
-          childSessionKey: key,
-          model: [value.modelProvider, value.model].filter(Boolean).join("/") || value.model || "default",
-          thinking: value.thinking || "default",
-          createdAt: value.createdAt || value.updatedAt || 0,
-          updatedAt: value.updatedAt || value.lastEventAt || value.createdAt || 0,
-          summary: value.terminalSummary || value.progressSummary || meta.last || relativeTime(value.updatedAt),
-          lastAction: null
-        };
-      })
-  );
-  return items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  const state = await loadOpenClawState(stateDir).catch(() => null);
+  return [buildCalendarSubagent(state)];
 };
 
 const loadOpenClawState = async (stateDir) => {
@@ -434,14 +423,13 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
     getApprovals: async () => (await safeState())?.approvals || safeGatewayRead("/api/miniapp/approvals", approvals),
     getSubagents: async () => {
       try {
-        if (await exists(path.join(stateDir, "agents/main/sessions/sessions.json"))) {
-          const live = await loadSubagentsFromState(stateDir);
-          if (live.length) return live;
+        if (await exists(path.join(stateDir, "openclaw.json"))) {
+          return loadSubagentsFromState(stateDir);
         }
       } catch (error) {
         logger.warn("openclaw.subagents.fallback", { reason: error.message });
       }
-      return safeGatewayRead("/api/miniapp/subagents", subagents);
+      return safeGatewayRead("/api/miniapp/subagents", subagents.slice(0, 1));
     },
     updateSubagent: async (subagentId, action, actorId, message = "") => {
       const live = await loadSubagentsFromState(stateDir).catch(() => []);

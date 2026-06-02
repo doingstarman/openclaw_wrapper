@@ -133,33 +133,20 @@ export const mockSkills = [
 
 export const mockSubagents = [
   {
-    id: "subagent_demo_1",
-    label: "аудит mini app",
-    task: "Проверить UX и риски Telegram Mini App",
-    status: "completed",
-    outcome: "success",
-    requesterSessionKey: "agent:main:telegram:direct:1037751541",
-    childSessionKey: "agent:main:subagent:demo-1",
-    model: "default",
-    thinking: "medium",
-    createdAt: Date.now() - 1000 * 60 * 34,
-    updatedAt: Date.now() - 1000 * 60 * 8,
-    summary: "Найдены мелкие UX-замечания, критичных проблем нет.",
-    lastAction: null
-  },
-  {
-    id: "subagent_demo_2",
-    label: "исследование деплоя",
-    task: "Проверить docker compose и production env",
+    id: "calendar_manager",
+    label: "Агент управления календарём",
+    task: "Следит за расписанием, ближайшими событиями и напоминаниями",
     status: "running",
     outcome: null,
-    requesterSessionKey: "agent:main:main",
-    childSessionKey: "agent:main:subagent:demo-2",
+    requesterSessionKey: "agent:main:telegram:direct:1037751541",
+    childSessionKey: "agent:main:subagent:calendar-manager",
     model: "default",
     thinking: "medium",
-    createdAt: Date.now() - 1000 * 60 * 12,
-    updatedAt: Date.now() - 1000 * 60 * 2,
-    summary: "Проверяет конфигурацию контейнера…",
+    createdAt: Date.now() - 1000 * 60 * 60 * 6,
+    updatedAt: Date.now() - 1000 * 60 * 12,
+    summary: "Календарь под наблюдением. Готов подсветить ближайшие события и конфликты.",
+    nextEvent: "Созвон по интеграции OpenClaw",
+    nextEventAt: "сегодня 16:30",
     lastAction: null
   }
 ];

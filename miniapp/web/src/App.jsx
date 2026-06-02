@@ -756,7 +756,7 @@ export default function App() {
                     <div><span>модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
                     <div><span>роль</span><strong>{displayStatus(bootstrap?.role || "guest")}</strong></div>
                     <div><span>skills</span><strong>{activeSkillsCount}/{skills.length || skillsData.length || 0}</strong></div>
-                    <div><span>субагенты</span><strong>{runningSubagentsCount}/{subagents.length}</strong></div>
+                    <div><span>субагент</span><strong>{subagents[0]?.status ? displayStatus(subagents[0].status) : "календарь"}</strong></div>
                   </div>
                 </section>
 
@@ -768,8 +768,8 @@ export default function App() {
                   </button>
                   <button onClick={openSubagents}>
                     <Workflow size={18} />
-                    <span>Субагенты</span>
-                    <strong>{runningSubagentsCount ? `${runningSubagentsCount} в работе` : `${subagents.length} в истории`}</strong>
+                    <span>Календарь</span>
+                    <strong>{subagents[0]?.nextEvent || "агент управления"}</strong>
                   </button>
                   <button>
                     <ShieldCheck size={18} />
@@ -826,13 +826,13 @@ export default function App() {
                 <section className="skills-hero">
                   <div>
                     <span>Delegation</span>
-                    <h2>Субагенты</h2>
-                    <p>{subagents.length} запусков · {runningSubagentsCount} сейчас в работе · завершение приходит push-уведомлением</p>
+                    <h2>Агент календаря</h2>
+                    <p>Единственный субагент · управление расписанием, событиями и напоминаниями</p>
                   </div>
                   <button onClick={() => setAgentView("main")}>Назад</button>
                 </section>
 
-                <Panel title="Управление" right={<button onClick={openSubagents}>Обновить</button>}>
+                <Panel title="Управление календарём" right={<button onClick={openSubagents}>Обновить</button>}>
                   <div className="list">
                     {subagents.map((item) => (
                       <article key={item.id || item.childSessionKey} className="skill-card">
@@ -847,10 +847,10 @@ export default function App() {
                           </div>
                         </div>
                         <div className="skill-meta-grid">
-                          <div><span>создан</span><strong>{formatDateTime(item.createdAt)}</strong></div>
+                          <div><span>ближайшее</span><strong>{item.nextEvent || "нет событий"}</strong></div>
+                          <div><span>когда</span><strong>{item.nextEventAt || "-"}</strong></div>
                           <div><span>обновлен</span><strong>{formatDateTime(item.updatedAt)}</strong></div>
                           <div><span>модель</span><strong>{item.model || "default"}</strong></div>
-                          <div><span>thinking</span><strong>{item.thinking || "default"}</strong></div>
                         </div>
                         <div className="kv-list compact">
                           <div><span>child</span><strong>{item.childSessionKey || "-"}</strong></div>
@@ -859,12 +859,12 @@ export default function App() {
                         <p className="muted-copy">{item.summary || "Пока нет summary"}</p>
                         {item.lastAction ? <p className="muted-copy">Последнее действие: {item.lastAction}</p> : null}
                         <div className="skill-actions">
-                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "steer")}>Направить</button>
-                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "kill")}>Остановить</button>
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "steer")}>Дать инструкцию</button>
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "kill")}>Поставить на паузу</button>
                         </div>
                       </article>
                     ))}
-                    {!subagents.length ? <div className="empty-inline">Активных или сохраненных субагентов не найдено</div> : null}
+                    {!subagents.length ? <div className="empty-inline">Агент календаря пока не найден</div> : null}
                   </div>
                 </Panel>
               </>
