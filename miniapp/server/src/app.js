@@ -31,11 +31,25 @@ export const createApp = (overrides = {}) => {
   const webDistPath = path.resolve(process.cwd(), mergedConfig.webDistPath);
   const indexHtmlPath = path.join(webDistPath, "index.html");
   if (fs.existsSync(indexHtmlPath)) {
-    app.use(express.static(webDistPath, { index: false }));
+    app.use(
+      express.static(webDistPath, {
+        etag: false,
+        index: false,
+        lastModified: false,
+        setHeaders: (res) => {
+          res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        }
+      })
+    );
     app.get("*", (req, res, next) => {
       if (req.path.startsWith("/api/")) {
         return next();
       }
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       return res.sendFile(indexHtmlPath);
     });
   } else {
