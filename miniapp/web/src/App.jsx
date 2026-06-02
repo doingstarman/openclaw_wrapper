@@ -1,5 +1,19 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Activity, BrainCircuit, FileText, Gauge, Settings, Workflow } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  BrainCircuit,
+  CalendarClock,
+  Cpu,
+  FileText,
+  Gauge,
+  Search,
+  Server,
+  Settings,
+  ShieldCheck,
+  Wrench,
+  Workflow
+} from "lucide-react";
 import { api } from "./api/client";
 import { getTelegramUserLabel, initTelegram } from "./lib/telegram";
 import { clientLogger } from "./lib/logger";
@@ -11,30 +25,13 @@ const bottomNavItems = [
   { id: "settings", label: "Настройки", icon: Settings }
 ];
 
-const skillsData = [
-  { id: "log_analyzer", status: "enabled", health: "в норме", updated: "4 мин назад" },
-  { id: "web_search", status: "disabled", health: "нужен API-ключ", updated: "1 час назад" },
-  { id: "doc_summarizer", status: "enabled", health: "в норме", updated: "сегодня" },
-  { id: "telegram_bridge", status: "enabled", health: "в норме", updated: "вчера" }
-];
-
-const cronJobs = [
-  { id: "daily_summary", schedule: "0 9 * * *", last: "success", next: "08:59" },
-  { id: "log_monitor", schedule: "*/10 * * * *", last: "failed", next: "00:08" },
-  { id: "weekly_audit", schedule: "0 8 * * 1", last: "success", next: "Пн 08:00" }
-];
-
-const securityAlerts = [
-  { id: "sec_01", level: "HIGH", text: "запрошен shell exec вне списка разрешений" },
-  { id: "sec_02", level: "MEDIUM", text: "новый браузер запросил привязку устройства" },
-  { id: "sec_03", level: "MEDIUM", text: "cron log_monitor упал 3 раза подряд" }
-];
 
 const statusLabels = {
   "1h": "1 ч",
   "24h": "24 ч",
   "7d": "7 д",
   "30d": "30 д",
+  active: "активен",
   admin: "админ",
   all: "все",
   approved: "одобрено",
@@ -45,9 +42,14 @@ const statusLabels = {
   guest: "гость",
   HIGH: "высокий",
   idle: "ожидает",
+  inactive: "выключен",
   live: "живо",
   calendar: "календарь",
   MEDIUM: "средний",
+  missing_key: "нет ключа",
+  needs_config: "нужна настройка",
+  not_configured: "не настроен",
+  ok: "в норме",
   online: "онлайн",
   paused: "пауза",
   pending: "ожидает",
@@ -93,6 +95,14 @@ const metricOptions = [
 const rangeOptions = (ranges = ["1h", "24h", "7d", "30d", "all"]) =>
   ranges.map((id) => ({ id, label: displayStatus(id) }));
 
+const skillFilters = [
+  { id: "all", label: "Все" },
+  { id: "active", label: "Активные" },
+  { id: "inactive", label: "Выключены" },
+  { id: "needs_attention", label: "С ошибками" },
+  { id: "recent", label: "Недавние" }
+];
+
 const compactNumber = (value) => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}k`;
@@ -100,6 +110,29 @@ const compactNumber = (value) => {
 };
 
 const money = (value) => `$${Number(value || 0).toFixed(2)}`;
+
+const formatDateTime = (value) => {
+  if (!value) return "никогда";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
+const formatDate = (value) => {
+  if (!value) return "неизвестно";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  });
+};
 
 const metricValue = (item, metric) => {
   if (metric === "cost") return item.costUsd || 0;
@@ -236,21 +269,35 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [ai, setAi] = useState(null);
   const [approvals, setApprovals] = useState([]);
+  const [skills, setSkills] = useState([]);
+  const [subagents, setSubagents] = useState([]);
+  const [selectedSkill, setSelectedSkill] = useState(null);
+  const [agentView, setAgentView] = useState("main");
+  const [skillQuery, setSkillQuery] = useState("");
+  const [skillFilter, setSkillFilter] = useState("all");
   const [logs, setLogs] = useState([]);
   const [logsCursor, setLogsCursor] = useState("0");
   const [hasMoreLogs, setHasMoreLogs] = useState(false);
   const [tokenRange, setTokenRange] = useState("24h");
   const [tokenMetric, setTokenMetric] = useState("tokens");
   const [error, setError] = useState("");
+  const [authMissing, setAuthMissing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const canApprove = bootstrap?.permissions?.canApprove === true;
   const userLabel = useMemo(() => getTelegramUserLabel(), []);
   const primaryModel = ai?.models?.find((m) => m.role === "primary");
+  const skillsData = overview?.skills || [];
+  const cronJobs = overview?.cronJobs || [];
+  const securityAlerts = overview?.securityAlerts || [];
   const activeTokenData = ai?.rangeMetrics?.[tokenRange] || ai?.rangeMetrics?.["24h"];
   const activeModels = activeTokenData?.byModel || ai?.models || [];
   const activeTotals = activeTokenData?.totals || ai?.totals || {};
   const metricName = metricOptions.find((item) => item.id === tokenMetric)?.label || "Токены";
+  const pendingApprovals = approvals.filter((item) => item.state === "pending");
+  const activeSkillsCount = skills.filter((skill) => skill.status === "active").length;
+  const attentionSkillsCount = skills.filter((skill) => ["failed", "needs_config", "missing_key"].includes(skill.health)).length;
+  const runningSubagentsCount = subagents.filter((item) => item.status === "running").length;
   const currentEvent = useMemo(() => {
     if (overview?.currentEvent) {
       return {
@@ -308,12 +355,20 @@ export default function App() {
     ],
     [activeTotals]
   );
-
-  useEffect(() => {
-    initTelegram().catch((error) => {
-      clientLogger.error("telegram.init.failed", { error: error.message });
+  const filteredSkills = useMemo(() => {
+    const query = skillQuery.trim().toLowerCase();
+    return skills.filter((skill) => {
+      const text = `${skill.id} ${skill.name} ${skill.description}`.toLowerCase();
+      const matchesQuery = !query || text.includes(query);
+      const matchesFilter =
+        skillFilter === "all" ||
+        (skillFilter === "active" && skill.status === "active") ||
+        (skillFilter === "inactive" && skill.status === "inactive") ||
+        (skillFilter === "needs_attention" && ["failed", "needs_config", "missing_key"].includes(skill.health)) ||
+        (skillFilter === "recent" && skill.lastRunAt);
+      return matchesQuery && matchesFilter;
     });
-  }, []);
+  }, [skillFilter, skillQuery, skills]);
 
   useEffect(() => {
     const onWindowError = (event) => {
@@ -338,6 +393,7 @@ export default function App() {
 
   const loadTab = async (tab) => {
     setError("");
+    setAuthMissing(false);
     setLoading(true);
     try {
       if (tab === "overview") {
@@ -354,8 +410,14 @@ export default function App() {
       }
       if (tab === "ai") setAi(await api.ai());
       if (tab === "agent") {
-        const approvalsData = await api.approvals();
+        const [approvalsData, skillsData, subagentsData] = await Promise.all([
+          api.approvals(),
+          api.skills(),
+          api.subagents()
+        ]);
         setApprovals(approvalsData.items || []);
+        setSkills(skillsData.items || []);
+        setSubagents(subagentsData.items || []);
       }
       if (tab === "logs") {
         const logsData = await api.logs("0");
@@ -368,6 +430,7 @@ export default function App() {
       }
     } catch (err) {
       clientLogger.error("ui.loadTab.failed", { tab, error: err.message });
+      setAuthMissing(err.message === "Missing Telegram initData");
       setError(err.message);
     } finally {
       setLoading(false);
@@ -378,11 +441,13 @@ export default function App() {
     (async () => {
       setLoading(true);
       try {
+        await initTelegram();
         const boot = await api.bootstrap();
         setBootstrap(boot);
         await loadTab("overview");
       } catch (err) {
         clientLogger.error("ui.bootstrap.failed", { error: err.message });
+        setAuthMissing(err.message === "Missing Telegram initData");
         setError(err.message);
       } finally {
         setLoading(false);
@@ -392,7 +457,54 @@ export default function App() {
 
   const onTabClick = async (tab) => {
     setActiveTab(tab);
+    if (tab !== "agent") setAgentView("main");
     await loadTab(tab);
+  };
+
+  const openSkills = async () => {
+    setActiveTab("agent");
+    setAgentView("skills");
+    const skillsData = await api.skills();
+    setSkills(skillsData.items || []);
+  };
+
+  const openSubagents = async () => {
+    setActiveTab("agent");
+    setAgentView("subagents");
+    const data = await api.subagents();
+    setSubagents(data.items || []);
+  };
+
+  const openSkillDetail = async (skillId) => {
+    const detail = await api.skill(skillId);
+    setSelectedSkill(detail.item);
+    setAgentView("skillDetail");
+  };
+
+  const runSkillAction = async (skillId, action) => {
+    try {
+      const result = await api.skillAction(skillId, action);
+      const updated = result.item;
+      setSelectedSkill(updated);
+      setSkills((prev) => prev.map((skill) => (skill.id === skillId ? { ...skill, ...updated } : skill)));
+    } catch (err) {
+      clientLogger.error("ui.skillAction.failed", { skillId, action, error: err.message });
+      setError(err.message);
+    }
+  };
+
+  const runSubagentAction = async (subagentId, action) => {
+    const message = action === "steer" ? window.prompt("Что передать субагенту?") : "";
+    if (action === "steer" && !message?.trim()) return;
+    if (action === "kill" && !window.confirm("Остановить этого субагента?")) return;
+    try {
+      const result = await api.subagentAction(subagentId, action, message || "");
+      const updated = result.item;
+      setSubagents((prev) => prev.map((item) => (item.id === updated.id || item.childSessionKey === updated.childSessionKey ? { ...item, ...updated } : item)));
+    } catch (err) {
+      clientLogger.error("ui.subagentAction.failed", { subagentId, action, error: err.message });
+      setError(err.message);
+    }
   };
 
   const openLogs = async () => {
@@ -427,65 +539,96 @@ export default function App() {
 
   return (
     <div className="app">
-      {error ? <div className="error">{error}</div> : null}
+      {authMissing ? (
+        <div className="empty-state">
+          <h2>Открой меня из Telegram</h2>
+          <p>Этот пульт проверяет Telegram initData, поэтому прямой браузерный URL без подписи не пускает внутрь.</p>
+          <small>Если это тест в браузере — нужен отдельный dev-режим, но для боевого доступа он выключен специально.</small>
+        </div>
+      ) : error ? <div className="error">{error}</div> : null}
       {loading ? <div className="loading">Загрузка...</div> : null}
 
       <main className="content">
         {activeTab === "overview" && overview && (
           <div className="stack">
-            <section className="event-banner">
-              <div className="event-banner-top">
-                <span>{currentEvent.label}</span>
+            <section className="home-hero">
+              <div className="home-hero-glow" />
+              <div className="home-hero-top">
+                <div className="hero-source">
+                  <CalendarClock size={16} />
+                  <span>{currentEvent.label}</span>
+                </div>
                 <StatusPill value={currentEvent.state} />
               </div>
-              <div>
+              <div className="home-hero-main">
                 <h2>{currentEvent.title}</h2>
                 <p>{currentEvent.detail}</p>
               </div>
-              <div className="event-banner-foot">
-                <span>Инстанс: {overview.instance}</span>
-                <span>{overview.currentBot}</span>
+              <div className="home-hero-bottom">
+                <div>
+                  <span>Следующее действие</span>
+                  <strong>{overview.operational?.nearestCron || overview.nearestCron}</strong>
+                </div>
+                <div>
+                  <span>Инстанс</span>
+                  <strong>{overview.instance}</strong>
+                </div>
               </div>
             </section>
 
-            <Panel
-              title="Статус системы"
-              right={
+            <section className="home-status-grid">
+              <article>
+                <Server size={17} />
+                <span>Gateway</span>
+                <strong>{displayStatus(overview.health)}</strong>
+              </article>
+              <article>
+                <Bot size={17} />
+                <span>Telegram</span>
+                <strong>{overview.currentBot}</strong>
+              </article>
+              <article>
+                <Cpu size={17} />
+                <span>Модель</span>
+                <strong>{primaryModel?.id || overview.primaryModel}</strong>
+              </article>
+              <article>
+                <ShieldCheck size={17} />
+                <span>Риски</span>
+                <strong>{securityAlerts.length}</strong>
+              </article>
+            </section>
+
+            <section className="home-command-band">
+              <div className="command-band-head">
+                <div>
+                  <span>Операционный срез</span>
+                  <h3>Что сейчас делает OpenClaw</h3>
+                </div>
                 <div className="subtle subtle-icon">
                   <Activity size={14} />
-                  <span>здорово</span>
+                  <span>{overview.workload}</span>
                 </div>
-              }
-            >
-              <div className="card-grid">
-                <article className="card">
-                  <h4>Статус</h4>
-                  <p>{displayStatus(overview.status)}</p>
+              </div>
+              <div className="home-timeline">
+                <article>
+                  <span>последняя сессия</span>
+                  <strong>{overview.operational?.lastSession || sessions[0]?.title || "-"}</strong>
                 </article>
-                <article className="card">
-                  <h4>Нагрузка</h4>
-                  <p>{overview.workload}</p>
+                <article>
+                  <span>последний навык</span>
+                  <strong>{overview.operational?.lastSkill || skillsData[0]?.id || "-"}</strong>
                 </article>
-                <article className="card">
-                  <h4>Здоровье</h4>
-                  <p>{displayStatus(overview.health)}</p>
+                <article>
+                  <span>последний cron</span>
+                  <strong>{overview.operational?.latestCron || overview.latestCron}</strong>
                 </article>
-                <article className="card">
-                  <h4>Текущий бот</h4>
-                  <p>{overview.currentBot}</p>
+                <article>
+                  <span>основная модель</span>
+                  <strong>{overview.operational?.primaryModel || primaryModel?.id || overview.primaryModel}</strong>
                 </article>
               </div>
-            </Panel>
-
-            <Panel title="Операционный срез">
-              <div className="kv-list">
-                <div><span>последняя сессия</span><strong>{overview.operational?.lastSession || sessions[0]?.title || "-"}</strong></div>
-                <div><span>последний навык</span><strong>{overview.operational?.lastSkill || skillsData[0]?.id}</strong></div>
-                <div><span>последний cron</span><strong>{overview.operational?.latestCron || overview.latestCron}</strong></div>
-                <div><span>ближайший cron</span><strong>{overview.operational?.nearestCron || overview.nearestCron}</strong></div>
-                <div><span>основная модель</span><strong>{overview.operational?.primaryModel || primaryModel?.id || overview.primaryModel}</strong></div>
-              </div>
-            </Panel>
+            </section>
 
             <Panel title="Безопасность и предупреждения" right={<StatusPill value={String(securityAlerts.length)} />}>
               <div className="list">
@@ -595,108 +738,343 @@ export default function App() {
 
         {activeTab === "agent" && (
           <div className="stack">
-            <Panel title="Работа агента">
-              <div className="kv-list">
-                <div><span>активная сессия</span><strong>{sessions.find((item) => item.status === "running")?.title || "-"}</strong></div>
-                <div><span>основная модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
-                <div><span>ожидают решения</span><strong>{approvals.filter((item) => item.state === "pending").length}</strong></div>
-                <div><span>режим доступа</span><StatusPill value={bootstrap?.role || "guest"} /></div>
-              </div>
-            </Panel>
-
-            <Panel title="Согласования" right={<StatusPill value={String(approvals.length)} />}>
-              <div className="list">
-                {approvals.map((a) => (
-                  <article key={a.id} className="list-item approval-item">
-                    <div>
-                      <strong>{a.id}</strong>
-                      <div>{a.title}</div>
-                      <small>{a.meta}</small>
+            {agentView === "main" && (
+              <>
+                <section className="agent-hero">
+                  <div className="agent-hero-top">
+                    <div className="agent-orbit">
+                      <Workflow size={21} />
                     </div>
-                    <div className="approval-meta">
-                      <StatusPill value={a.risk} />
-                      <StatusPill value={a.state} />
-                      <div className="approval-actions">
-                        <button className="approve-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "approve")}>Одобрить</button>
-                        <button className="reject-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "reject")}>Отклонить</button>
+                    <StatusPill value={pendingApprovals.length ? "pending" : "running"} />
+                  </div>
+                  <div className="agent-hero-main">
+                    <span>Операционный центр агента</span>
+                    <h2>{sessions.find((item) => item.status === "running")?.title || "агент ожидает задачу"}</h2>
+                    <p>{pendingApprovals.length ? `${pendingApprovals.length} решений ждут подтверждения` : "Критичных согласований нет"}</p>
+                  </div>
+                  <div className="agent-hero-grid">
+                    <div><span>модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+                    <div><span>роль</span><strong>{displayStatus(bootstrap?.role || "guest")}</strong></div>
+                    <div><span>skills</span><strong>{activeSkillsCount}/{skills.length || skillsData.length || 0}</strong></div>
+                    <div><span>субагент</span><strong>{subagents[0]?.status ? displayStatus(subagents[0].status) : "календарь"}</strong></div>
+                  </div>
+                </section>
+
+                <section className="agent-action-grid">
+                  <button onClick={openSkills}>
+                    <Wrench size={18} />
+                    <span>Навыки</span>
+                    <strong>{attentionSkillsCount ? `${attentionSkillsCount} требуют внимания` : `${activeSkillsCount} активны`}</strong>
+                  </button>
+                  <button onClick={openSubagents}>
+                    <Workflow size={18} />
+                    <span>Календарь</span>
+                    <strong>{subagents[0]?.nextEvent || "агент управления"}</strong>
+                  </button>
+                  <button>
+                    <ShieldCheck size={18} />
+                    <span>Согласования</span>
+                    <strong>{pendingApprovals.length ? `${pendingApprovals.length} ожидают` : "очередь пуста"}</strong>
+                  </button>
+                  <button onClick={openLogs}>
+                    <FileText size={18} />
+                    <span>Логи</span>
+                    <strong>живая лента</strong>
+                  </button>
+                </section>
+
+                <Panel title="Согласования" right={<StatusPill value={String(approvals.length)} />}>
+                  <div className="list">
+                    {approvals.map((a) => (
+                      <article key={a.id} className="approval-card">
+                        <div className="approval-card-head">
+                          <span>{a.id}</span>
+                          <div>
+                            <StatusPill value={a.risk} />
+                            <StatusPill value={a.state} />
+                          </div>
+                        </div>
+                        <div className="approval-card-body">
+                          <div>{a.title}</div>
+                          <small>{a.meta}</small>
+                        </div>
+                        <div className="approval-actions">
+                          <button className="approve-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "approve")}>Одобрить</button>
+                          <button className="reject-button" disabled={!canApprove || a.state !== "pending"} onClick={() => onApproveAction(a.id, "reject")}>Отклонить</button>
+                        </div>
+                      </article>
+                    ))}
+                    {!approvals.length ? <div className="empty-inline">Очередь согласований пуста</div> : null}
+                  </div>
+                </Panel>
+
+                <Panel title="Предупреждения безопасности">
+                  <div className="list">
+                    {securityAlerts.map((alert) => (
+                      <article key={alert.id} className="list-item">
+                        <div>{alert.text}</div>
+                        <StatusPill value={alert.level} />
+                      </article>
+                    ))}
+                  </div>
+                </Panel>
+              </>
+            )}
+
+            {agentView === "subagents" && (
+              <>
+                <section className="skills-hero">
+                  <div>
+                    <span>Delegation</span>
+                    <h2>Агент календаря</h2>
+                    <p>Единственный субагент · управление расписанием, событиями и напоминаниями</p>
+                  </div>
+                  <button onClick={() => setAgentView("main")}>Назад</button>
+                </section>
+
+                <Panel title="Управление календарём" right={<button onClick={openSubagents}>Обновить</button>}>
+                  <div className="list">
+                    {subagents.map((item) => (
+                      <article key={item.id || item.childSessionKey} className="skill-card">
+                        <div className="skill-card-main skill-card-main-static">
+                          <span>
+                            <strong>{item.label || item.id}</strong>
+                            <small>{item.task || "Задача не указана"}</small>
+                          </span>
+                          <div>
+                            <StatusPill value={item.status || "unknown"} />
+                            {item.outcome ? <StatusPill value={item.outcome} /> : null}
+                          </div>
+                        </div>
+                        <div className="skill-meta-grid">
+                          <div><span>ближайшее</span><strong>{item.nextEvent || "нет событий"}</strong></div>
+                          <div><span>когда</span><strong>{item.nextEventAt || "-"}</strong></div>
+                          <div><span>обновлен</span><strong>{formatDateTime(item.updatedAt)}</strong></div>
+                          <div><span>модель</span><strong>{item.model || "default"}</strong></div>
+                        </div>
+                        <div className="kv-list compact">
+                          <div><span>child</span><strong>{item.childSessionKey || "-"}</strong></div>
+                          <div><span>requester</span><strong>{item.requesterSessionKey || "-"}</strong></div>
+                        </div>
+                        <p className="muted-copy">{item.summary || "Пока нет summary"}</p>
+                        {item.lastAction ? <p className="muted-copy">Последнее действие: {item.lastAction}</p> : null}
+                        <div className="skill-actions">
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "steer")}>Дать инструкцию</button>
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "kill")}>Поставить на паузу</button>
+                        </div>
+                      </article>
+                    ))}
+                    {!subagents.length ? <div className="empty-inline">Агент календаря пока не найден</div> : null}
+                  </div>
+                </Panel>
+              </>
+            )}
+
+            {agentView === "skills" && (
+              <>
+                <section className="skills-hero">
+                  <div>
+                    <span>Toolbox</span>
+                    <h2>Навыки агента</h2>
+                    <p>{skills.length} установлено · {activeSkillsCount} активны · {attentionSkillsCount} требуют настройки</p>
+                  </div>
+                  <button onClick={() => setAgentView("main")}>Назад</button>
+                </section>
+
+                <Panel title="Поиск и фильтры">
+                  <div className="skill-toolbar">
+                    <label className="search-box">
+                      <Search size={15} />
+                      <input value={skillQuery} onChange={(event) => setSkillQuery(event.target.value)} placeholder="Поиск по навыкам" />
+                    </label>
+                    <SegmentControl items={skillFilters} value={skillFilter} onChange={setSkillFilter} />
+                  </div>
+                </Panel>
+
+                <div className="list">
+                  {filteredSkills.map((skill) => (
+                    <article key={skill.id} className="skill-card">
+                      <button className="skill-card-main" onClick={() => openSkillDetail(skill.id)}>
+                        <span>
+                          <strong>{skill.name || skill.id}</strong>
+                          <small>{skill.description || "Описание не задано"}</small>
+                        </span>
+                        <StatusPill value={skill.status} />
+                      </button>
+                      <div className="skill-meta-grid">
+                        <div><span>последний запуск</span><strong>{formatDateTime(skill.lastRunAt)}</strong></div>
+                        <div><span>установлен</span><strong>{formatDate(skill.installedAt)}</strong></div>
+                        <div><span>источник</span><strong>{skill.source || "-"}</strong></div>
+                        <div><span>здоровье</span><StatusPill value={skill.health || "unknown"} /></div>
                       </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </Panel>
+                      <div className="skill-actions">
+                        <button onClick={() => runSkillAction(skill.id, "check")}>Проверить</button>
+                        <button onClick={() => openSkillDetail(skill.id)}>Подробнее</button>
+                        <button onClick={() => runSkillAction(skill.id, skill.status === "active" ? "disable" : "enable")}>
+                          {skill.status === "active" ? "Выключить" : "Включить"}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                  {!filteredSkills.length ? <div className="empty-inline">Навыки не найдены</div> : null}
+                </div>
+              </>
+            )}
 
-            <Panel title="Предупреждения безопасности">
-              <div className="list">
-                {securityAlerts.map((alert) => (
-                  <article key={alert.id} className="list-item">
-                    <div>{alert.text}</div>
-                    <StatusPill value={alert.level} />
-                  </article>
-                ))}
-              </div>
-            </Panel>
+            {agentView === "skillDetail" && selectedSkill && (
+              <>
+                <Panel title={selectedSkill.name || selectedSkill.id} right={<button onClick={() => setAgentView("skills")}>Назад</button>}>
+                  <div className="skill-detail-head">
+                    <p>{selectedSkill.description || "Описание не задано"}</p>
+                    <div>
+                      <StatusPill value={selectedSkill.status} />
+                      <StatusPill value={selectedSkill.health || "unknown"} />
+                    </div>
+                  </div>
+                  <div className="kv-list">
+                    <div><span>id</span><strong>{selectedSkill.id}</strong></div>
+                    <div><span>версия</span><strong>{selectedSkill.version || "-"}</strong></div>
+                    <div><span>источник</span><strong>{selectedSkill.source || "-"}</strong></div>
+                    <div><span>установлен</span><strong>{formatDate(selectedSkill.installedAt)}</strong></div>
+                    <div><span>последний запуск</span><strong>{formatDateTime(selectedSkill.lastRunAt)}</strong></div>
+                    <div><span>результат</span><StatusPill value={selectedSkill.lastResult || "unknown"} /></div>
+                    <div><span>запусков</span><strong>{selectedSkill.runs ?? 0}</strong></div>
+                  </div>
+                </Panel>
+
+                <Panel title="Управление">
+                  <div className="skill-actions skill-actions-wide">
+                    <button onClick={() => runSkillAction(selectedSkill.id, "check")}>Запустить проверку</button>
+                    <button onClick={() => runSkillAction(selectedSkill.id, selectedSkill.status === "active" ? "disable" : "enable")}>
+                      {selectedSkill.status === "active" ? "Выключить" : "Включить"}
+                    </button>
+                  </div>
+                </Panel>
+
+                <Panel title="Триггеры и зависимости">
+                  <div className="tag-list">
+                    {(selectedSkill.triggers || []).map((item) => <span key={`trigger-${item}`}>{item}</span>)}
+                    {(selectedSkill.dependencies || []).map((item) => <span key={`dep-${item}`}>{item}</span>)}
+                    {!selectedSkill.triggers?.length && !selectedSkill.dependencies?.length ? <small>Нет данных</small> : null}
+                  </div>
+                </Panel>
+
+                <Panel title="Последние логи">
+                  <div className="list">
+                    {(selectedSkill.logs || []).map((line, index) => (
+                      <article key={`${selectedSkill.id}-log-${index}`} className="list-item mono">{line}</article>
+                    ))}
+                    {!selectedSkill.logs?.length ? <div className="empty-inline">Логов пока нет</div> : null}
+                  </div>
+                </Panel>
+              </>
+            )}
           </div>
         )}
 
         {activeTab === "settings" && (
           <div className="stack">
-            <Panel title="Настройки агента">
-              <div className="kv-list">
-                <div><span>имя агента</span><strong>warframe-operator</strong></div>
-                <div><span>режим политики</span><strong>сбалансированный</strong></div>
-                <div><span>рассуждение</span><strong>адаптивное</strong></div>
-                <div><span>согласования exec</span><StatusPill value="MEDIUM" /></div>
-                <div><span>модель по умолчанию</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
+            <section className="settings-hero">
+              <div>
+                <span>Configuration</span>
+                <h2>Настройки</h2>
+                <p>Системные параметры mini app, Telegram-доступа и локального OpenClaw.</p>
               </div>
-            </Panel>
+              <StatusPill value={overview?.status || "unknown"} />
+            </section>
 
-            <Panel title="Журнал работы">
-              <button className="full menu-action" onClick={openLogs}>
-                <FileText size={16} />
-                <span>Открыть ленту логов</span>
+            <section className="settings-grid">
+              <article className="settings-tile">
+                <Server size={18} />
+                <span>Инстанс</span>
+                <strong>{overview?.instance || "-"}</strong>
+              </article>
+              <article className="settings-tile">
+                <Bot size={18} />
+                <span>Telegram</span>
+                <strong>{overview?.currentBot || "-"}</strong>
+              </article>
+              <article className="settings-tile">
+                <BrainCircuit size={18} />
+                <span>Модель</span>
+                <strong>{overview?.operational?.primaryModel || primaryModel?.id || overview?.primaryModel || "-"}</strong>
+              </article>
+              <article className="settings-tile">
+                <ShieldCheck size={18} />
+                <span>Доступ</span>
+                <strong>{displayStatus(bootstrap?.role || "guest")}</strong>
+              </article>
+            </section>
+
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <span>OpenClaw</span>
+                  <h3>Runtime и gateway</h3>
+                </div>
+                <StatusPill value={overview?.health || "unknown"} />
+              </div>
+              <div className="settings-list">
+                <div><span>нагрузка</span><strong>{overview?.workload || "-"}</strong></div>
+                <div><span>paired devices</span><strong>{overview?.operational?.pairedDevices ?? "-"}</strong></div>
+                <div><span>ближайший cron</span><strong>{overview?.operational?.nearestCron || overview?.nearestCron || "-"}</strong></div>
+                <div><span>последний cron</span><strong>{overview?.operational?.latestCron || overview?.latestCron || "-"}</strong></div>
+              </div>
+            </section>
+
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <span>Security</span>
+                  <h3>Telegram и права</h3>
+                </div>
+                <StatusPill value={canApprove ? "admin" : "viewer"} />
+              </div>
+              <div className="settings-list">
+                <div><span>пользователь</span><strong>{userLabel}</strong></div>
+                <div><span>роль</span><strong>{displayStatus(bootstrap?.role || "guest")}</strong></div>
+                <div><span>право согласования</span><strong>{canApprove ? "есть" : "нет"}</strong></div>
+                <div><span>запись согласований</span><strong>{bootstrap?.features?.approvalsWritable ? "включена" : "выключена"}</strong></div>
+              </div>
+            </section>
+
+            <section className="settings-action-grid">
+              <button onClick={openLogs}>
+                <FileText size={18} />
+                <span>Лента логов</span>
+                <strong>Открыть журнал работы</strong>
               </button>
-            </Panel>
+              <button onClick={openSkills}>
+                <Wrench size={18} />
+                <span>Навыки</span>
+                <strong>{skillsData.length || skills.length || 0} модулей</strong>
+              </button>
+            </section>
 
-            <Panel title="Навыки">
-              <div className="list">
-                {skillsData.map((s) => (
-                  <article key={s.id} className="list-item">
-                    <div>
-                      <strong>{s.id}</strong>
-                      <small>здоровье: {s.health} | обновлен: {s.updated}</small>
-                    </div>
-                    <StatusPill value={s.status} />
-                  </article>
-                ))}
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <div>
+                  <span>Automation</span>
+                  <h3>Расписание cron</h3>
+                </div>
+                <StatusPill value={String(cronJobs.length)} />
               </div>
-            </Panel>
-
-            <Panel title="Расписание cron">
-              <div className="list">
+              <div className="settings-compact-list">
                 {cronJobs.map((job) => (
-                  <article key={job.id} className="list-item">
+                  <article key={job.id}>
                     <div>
                       <strong>{job.id}</strong>
                       <small>{job.schedule}</small>
                     </div>
-                    <div className="right-col">
+                    <div>
                       <StatusPill value={job.last} />
                       <small>{job.next}</small>
                     </div>
                   </article>
                 ))}
+                {!cronJobs.length ? <div className="empty-inline">Cron-задач пока нет</div> : null}
               </div>
-            </Panel>
-
-            <Panel title="Доступ Telegram">
-              <div className="kv-list">
-                <div><span>пользователь</span><strong>{userLabel}</strong></div>
-                <div><span>роль</span><StatusPill value={bootstrap?.role || "guest"} /></div>
-                <div><span>право согласования</span><strong>{canApprove ? "есть" : "нет"}</strong></div>
-                <div><span>запись согласований</span><strong>{bootstrap?.features?.approvalsWritable ? "включена" : "выключена"}</strong></div>
-              </div>
-            </Panel>
+            </section>
           </div>
         )}
 
