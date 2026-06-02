@@ -34,12 +34,17 @@ const statusLabels = {
   active: "активен",
   admin: "админ",
   all: "все",
+  accepted: "принято",
   approved: "одобрено",
+  degraded: "сбой",
+  destructive: "опасно",
   disabled: "выключен",
   enabled: "включен",
+  external: "наружу",
   failed: "ошибка",
   fallback: "резервная",
   guest: "гость",
+  healthy: "здоров",
   HIGH: "высокий",
   idle: "ожидает",
   inactive: "выключен",
@@ -51,13 +56,17 @@ const statusLabels = {
   not_configured: "не настроен",
   ok: "в норме",
   online: "онлайн",
+  owner: "владелец",
   paused: "пауза",
   pending: "ожидает",
   primary: "основная",
   rejected: "отклонено",
+  risky: "риск",
   running: "в работе",
+  safe: "safe",
   stable: "стабильно",
   success: "успех",
+  unknown: "неизвестно",
   viewer: "просмотр"
 };
 
@@ -102,6 +111,17 @@ const skillFilters = [
   { id: "needs_attention", label: "С ошибками" },
   { id: "recent", label: "Недавние" }
 ];
+
+const confirmationDanger = new Set(["risky", "destructive", "external"]);
+const ownerOnlyDanger = new Set(["destructive", "external"]);
+
+const formatDuration = (seconds = 0) => {
+  const value = Number(seconds || 0);
+  if (!value) return "-";
+  if (value < 3600) return `${Math.round(value / 60)} мин`;
+  if (value < 86400) return `${Math.round(value / 3600)} ч`;
+  return `${Math.round(value / 86400)} д`;
+};
 
 const compactNumber = (value) => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`;
@@ -270,9 +290,13 @@ export default function App() {
   const [ai, setAi] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [subagents, setSubagents] = useState([]);
   const [selectedSkill, setSelectedSkill] = useState(null);
+  const [agents, setAgents] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [agentAudit, setAgentAudit] = useState([]);
+  const [agentBusyAction, setAgentBusyAction] = useState("");
   const [agentView, setAgentView] = useState("main");
+  const [settingsView, setSettingsView] = useState("main");
   const [skillQuery, setSkillQuery] = useState("");
   const [skillFilter, setSkillFilter] = useState("all");
   const [logs, setLogs] = useState([]);
@@ -297,7 +321,9 @@ export default function App() {
   const pendingApprovals = approvals.filter((item) => item.state === "pending");
   const activeSkillsCount = skills.filter((skill) => skill.status === "active").length;
   const attentionSkillsCount = skills.filter((skill) => ["failed", "needs_config", "missing_key"].includes(skill.health)).length;
-  const runningSubagentsCount = subagents.filter((item) => item.status === "running").length;
+  const healthyAgentsCount = agents.filter((agent) => agent.status === "healthy").length;
+  const attentionAgentsCount = agents.filter((agent) => ["degraded", "down", "unknown"].includes(agent.status)).length;
+  const selectedAgentIsOwner = Boolean(selectedAgent?.ownedByCurrentUser);
   const currentEvent = useMemo(() => {
     if (overview?.currentEvent) {
       return {
@@ -391,34 +417,43 @@ export default function App() {
     };
   }, []);
 
+  const loadAgentsData = async (agentId = "") => {
+    const [agentsData, auditData] = await Promise.all([api.agents(), api.agentAudit(agentId)]);
+    setAgents(agentsData.items || []);
+    setAgentAudit(auditData.items || []);
+  };
+
   const loadTab = async (tab) => {
     setError("");
     setAuthMissing(false);
     setLoading(true);
     try {
       if (tab === "overview") {
-        const [overviewData, sessionsData, approvalsData, aiData] = await Promise.all([
+        const [overviewData, sessionsData, approvalsData, aiData, agentsData] = await Promise.all([
           api.overview(),
           api.sessions(),
           api.approvals(),
-          api.ai()
+          api.ai(),
+          api.agents()
         ]);
         setOverview(overviewData);
         setSessions(sessionsData.items || []);
         setApprovals(approvalsData.items || []);
         setAi(aiData);
+        setAgents(agentsData.items || []);
       }
       if (tab === "ai") setAi(await api.ai());
       if (tab === "agent") {
-        const [approvalsData, skillsData, subagentsData] = await Promise.all([
+        const [approvalsData, skillsData, agentsData] = await Promise.all([
           api.approvals(),
           api.skills(),
-          api.subagents()
+          api.agents()
         ]);
         setApprovals(approvalsData.items || []);
         setSkills(skillsData.items || []);
-        setSubagents(subagentsData.items || []);
+        setAgents(agentsData.items || []);
       }
+      if (tab === "subagents") await loadAgentsData(selectedAgent?.id || "");
       if (tab === "logs") {
         const logsData = await api.logs("0");
         setLogs(logsData.items || []);
@@ -458,6 +493,8 @@ export default function App() {
   const onTabClick = async (tab) => {
     setActiveTab(tab);
     if (tab !== "agent") setAgentView("main");
+    if (tab !== "subagents") setSelectedAgent(null);
+    setSettingsView("main");
     await loadTab(tab);
   };
 
@@ -466,13 +503,6 @@ export default function App() {
     setAgentView("skills");
     const skillsData = await api.skills();
     setSkills(skillsData.items || []);
-  };
-
-  const openSubagents = async () => {
-    setActiveTab("agent");
-    setAgentView("subagents");
-    const data = await api.subagents();
-    setSubagents(data.items || []);
   };
 
   const openSkillDetail = async (skillId) => {
@@ -493,17 +523,72 @@ export default function App() {
     }
   };
 
-  const runSubagentAction = async (subagentId, action) => {
-    const message = action === "steer" ? window.prompt("Что передать субагенту?") : "";
-    if (action === "steer" && !message?.trim()) return;
-    if (action === "kill" && !window.confirm("Остановить этого субагента?")) return;
+  const openAgents = async () => {
+    setActiveTab("subagents");
+    setAgentView("main");
+    setSettingsView("main");
+    setSelectedAgent(null);
+    await loadAgentsData();
+  };
+
+  const openAgentDetail = async (agentId) => {
+    const [detail, auditData] = await Promise.all([api.agent(agentId), api.agentAudit(agentId)]);
+    setActiveTab("subagents");
+    setSettingsView("main");
+    setSelectedAgent(detail.item);
+    setAgentAudit(auditData.items || []);
+  };
+
+  const openSubagentSettings = async () => {
+    setActiveTab("settings");
+    setSettingsView("subagents");
+    setSelectedAgent(null);
+    await loadAgentsData();
+  };
+
+  const collectAgentParams = (action) => {
+    const params = {};
+    for (const param of action.params || []) {
+      if (!param.required) continue;
+      const value = window.prompt(`${action.label}: ${param.name}`);
+      if (!value) return null;
+      params[param.name] = value;
+    }
+    return params;
+  };
+
+  const runAgentControl = async (agent, action) => {
+    const danger = action.danger || "safe";
+    if (ownerOnlyDanger.has(danger) && !agent.ownedByCurrentUser) {
+      setError("Это действие доступно только владельцу агента");
+      return;
+    }
+
+    const params = collectAgentParams(action);
+    if (params === null) return;
+
+    const confirmed = confirmationDanger.has(danger)
+      ? window.confirm(`${action.label} для ${agent.name}? Уровень риска: ${displayStatus(danger)}.`)
+      : true;
+    if (!confirmed) return;
+
+    setAgentBusyAction(`${agent.id}:${action.id}`);
     try {
-      const result = await api.subagentAction(subagentId, action, message || "");
+      const result = await api.agentControl(agent.id, {
+        action: action.id,
+        params,
+        confirmed: confirmationDanger.has(danger)
+      });
       const updated = result.item;
-      setSubagents((prev) => prev.map((item) => (item.id === updated.id || item.childSessionKey === updated.childSessionKey ? { ...item, ...updated } : item)));
+      setSelectedAgent(updated);
+      setAgents((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      const auditData = await api.agentAudit(agent.id);
+      setAgentAudit(auditData.items || []);
     } catch (err) {
-      clientLogger.error("ui.subagentAction.failed", { subagentId, action, error: err.message });
+      clientLogger.error("ui.agentControl.failed", { agentId: agent.id, action: action.id, error: err.message });
       setError(err.message);
+    } finally {
+      setAgentBusyAction("");
     }
   };
 
@@ -597,6 +682,19 @@ export default function App() {
                 <span>Риски</span>
                 <strong>{securityAlerts.length}</strong>
               </article>
+            </section>
+
+            <section className="home-shortcut-grid">
+              <button onClick={openAgents}>
+                <Server size={18} />
+                <span>Субагенты</span>
+                <strong>{agents.length ? `${healthyAgentsCount}/${agents.length} healthy` : "registry пуст"}</strong>
+              </button>
+              <button onClick={() => onTabClick("agent")}>
+                <Workflow size={18} />
+                <span>OpenClaw агент</span>
+                <strong>{sessions.find((item) => item.status === "running")?.status ? "в работе" : "пульт управления"}</strong>
+              </button>
             </section>
 
             <section className="home-command-band">
@@ -748,7 +846,7 @@ export default function App() {
                     <StatusPill value={pendingApprovals.length ? "pending" : "running"} />
                   </div>
                   <div className="agent-hero-main">
-                    <span>Операционный центр агента</span>
+                    <span>OpenClaw agent</span>
                     <h2>{sessions.find((item) => item.status === "running")?.title || "агент ожидает задачу"}</h2>
                     <p>{pendingApprovals.length ? `${pendingApprovals.length} решений ждут подтверждения` : "Критичных согласований нет"}</p>
                   </div>
@@ -756,20 +854,19 @@ export default function App() {
                     <div><span>модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
                     <div><span>роль</span><strong>{displayStatus(bootstrap?.role || "guest")}</strong></div>
                     <div><span>skills</span><strong>{activeSkillsCount}/{skills.length || skillsData.length || 0}</strong></div>
-                    <div><span>субагент</span><strong>{subagents[0]?.status ? displayStatus(subagents[0].status) : "календарь"}</strong></div>
                   </div>
                 </section>
 
                 <section className="agent-action-grid">
+                  <button onClick={openAgents}>
+                    <Server size={18} />
+                    <span>Субагенты</span>
+                    <strong>{attentionAgentsCount ? `${attentionAgentsCount} требуют внимания` : `${healthyAgentsCount} healthy`}</strong>
+                  </button>
                   <button onClick={openSkills}>
                     <Wrench size={18} />
                     <span>Навыки</span>
                     <strong>{attentionSkillsCount ? `${attentionSkillsCount} требуют внимания` : `${activeSkillsCount} активны`}</strong>
-                  </button>
-                  <button onClick={openSubagents}>
-                    <Workflow size={18} />
-                    <span>Календарь</span>
-                    <strong>{subagents[0]?.nextEvent || "агент управления"}</strong>
                   </button>
                   <button>
                     <ShieldCheck size={18} />
@@ -816,55 +913,6 @@ export default function App() {
                         <StatusPill value={alert.level} />
                       </article>
                     ))}
-                  </div>
-                </Panel>
-              </>
-            )}
-
-            {agentView === "subagents" && (
-              <>
-                <section className="skills-hero">
-                  <div>
-                    <span>Delegation</span>
-                    <h2>Агент календаря</h2>
-                    <p>Единственный субагент · управление расписанием, событиями и напоминаниями</p>
-                  </div>
-                  <button onClick={() => setAgentView("main")}>Назад</button>
-                </section>
-
-                <Panel title="Управление календарём" right={<button onClick={openSubagents}>Обновить</button>}>
-                  <div className="list">
-                    {subagents.map((item) => (
-                      <article key={item.id || item.childSessionKey} className="skill-card">
-                        <div className="skill-card-main skill-card-main-static">
-                          <span>
-                            <strong>{item.label || item.id}</strong>
-                            <small>{item.task || "Задача не указана"}</small>
-                          </span>
-                          <div>
-                            <StatusPill value={item.status || "unknown"} />
-                            {item.outcome ? <StatusPill value={item.outcome} /> : null}
-                          </div>
-                        </div>
-                        <div className="skill-meta-grid">
-                          <div><span>ближайшее</span><strong>{item.nextEvent || "нет событий"}</strong></div>
-                          <div><span>когда</span><strong>{item.nextEventAt || "-"}</strong></div>
-                          <div><span>обновлен</span><strong>{formatDateTime(item.updatedAt)}</strong></div>
-                          <div><span>модель</span><strong>{item.model || "default"}</strong></div>
-                        </div>
-                        <div className="kv-list compact">
-                          <div><span>child</span><strong>{item.childSessionKey || "-"}</strong></div>
-                          <div><span>requester</span><strong>{item.requesterSessionKey || "-"}</strong></div>
-                        </div>
-                        <p className="muted-copy">{item.summary || "Пока нет summary"}</p>
-                        {item.lastAction ? <p className="muted-copy">Последнее действие: {item.lastAction}</p> : null}
-                        <div className="skill-actions">
-                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "steer")}>Дать инструкцию</button>
-                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "kill")}>Поставить на паузу</button>
-                        </div>
-                      </article>
-                    ))}
-                    {!subagents.length ? <div className="empty-inline">Агент календаря пока не найден</div> : null}
                   </div>
                 </Panel>
               </>
@@ -972,8 +1020,160 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === "subagents" && (
+          <div className="stack">
+            {!selectedAgent ? (
+              <>
+                <section className="skills-hero">
+                  <div>
+                    <span>Subagents</span>
+                    <h2>Субагенты</h2>
+                    <p>{agents.length} подключено · {healthyAgentsCount} healthy · {attentionAgentsCount} требуют внимания</p>
+                  </div>
+                  <button onClick={() => onTabClick("overview")}>На главную</button>
+                </section>
+
+                <div className="list">
+                  {agents.map((agent) => (
+                    <article key={agent.id} className="agent-card">
+                      <button className="agent-card-main" onClick={() => openAgentDetail(agent.id)}>
+                        <span>
+                          <strong>{agent.name}</strong>
+                          <small>{agent.id} · {agent.type} · {agent.environment || "environment не задан"}</small>
+                        </span>
+                        <StatusPill value={agent.status} />
+                      </button>
+                      <div className="agent-meta-grid">
+                        <div><span>health</span><strong>{agent.health?.version || "-"}</strong></div>
+                        <div><span>uptime</span><strong>{formatDuration(agent.health?.uptimeSec)}</strong></div>
+                        <div><span>auth</span><strong>{agent.auth?.type || "none"}</strong></div>
+                        <div><span>owner</span><strong>{agent.ownedByCurrentUser ? "вы" : `${agent.ownerUserIds?.length || 0} users`}</strong></div>
+                      </div>
+                      <div className="tag-list">
+                        {(agent.tags || []).map((tag) => <span key={`${agent.id}-${tag}`}>{tag}</span>)}
+                      </div>
+                      <div className="agent-actions">
+                        {(agent.commands?.actions || []).slice(0, 3).map((action) => (
+                          <button
+                            key={action.id}
+                            disabled={agentBusyAction === `${agent.id}:${action.id}` || (ownerOnlyDanger.has(action.danger) && !agent.ownedByCurrentUser)}
+                            onClick={() => runAgentControl(agent, action)}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                        <button onClick={() => openAgentDetail(agent.id)}>Детали</button>
+                      </div>
+                    </article>
+                  ))}
+                  {!agents.length ? <div className="empty-inline">Субагенты не найдены</div> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <Panel title={selectedAgent.name || selectedAgent.id} right={<button onClick={openAgents}>Назад</button>}>
+                  <div className="skill-detail-head">
+                    <p>{selectedAgent.id} · {selectedAgent.type} · {selectedAgent.environment || "environment не задан"}</p>
+                    <div>
+                      <StatusPill value={selectedAgent.status} />
+                      <StatusPill value={selectedAgent.enabled ? "enabled" : "disabled"} />
+                      <StatusPill value={selectedAgentIsOwner ? "owner" : bootstrap?.role || "viewer"} />
+                    </div>
+                  </div>
+                  <div className="kv-list">
+                    <div><span>health</span><strong>{displayStatus(selectedAgent.health?.status || selectedAgent.status)}</strong></div>
+                    <div><span>version</span><strong>{selectedAgent.health?.version || "-"}</strong></div>
+                    <div><span>commit</span><strong>{selectedAgent.health?.commit || "-"}</strong></div>
+                    <div><span>uptime</span><strong>{formatDuration(selectedAgent.health?.uptimeSec)}</strong></div>
+                    <div><span>last activity</span><strong>{formatDateTime(selectedAgent.health?.lastActivityAt)}</strong></div>
+                    <div><span>last error</span><strong>{selectedAgent.health?.lastError || "-"}</strong></div>
+                  </div>
+                </Panel>
+
+                <Panel title="Control actions">
+                  <div className="agent-command-list">
+                    {(selectedAgent.commands?.actions || []).map((action) => {
+                      const ownerBlocked = ownerOnlyDanger.has(action.danger) && !selectedAgent.ownedByCurrentUser;
+                      return (
+                        <article key={action.id} className="agent-command">
+                          <div>
+                            <strong>{action.label}</strong>
+                            <small>{action.params?.length ? action.params.map((param) => param.name).join(", ") : "params не нужны"}</small>
+                          </div>
+                          <StatusPill value={action.danger || "safe"} />
+                          <button
+                            disabled={ownerBlocked || agentBusyAction === `${selectedAgent.id}:${action.id}`}
+                            onClick={() => runAgentControl(selectedAgent, action)}
+                          >
+                            Запустить
+                          </button>
+                        </article>
+                      );
+                    })}
+                    {!selectedAgent.commands?.actions?.length ? <div className="empty-inline">Agent capabilities пусты</div> : null}
+                  </div>
+                </Panel>
+
+                <Panel title="Endpoints">
+                  <div className="settings-list">
+                    {Object.entries(selectedAgent.endpoints || {}).map(([name, value]) => (
+                      <div key={name}><span>{name}</span><strong>{value}</strong></div>
+                    ))}
+                  </div>
+                </Panel>
+
+                <Panel title="Tasks">
+                  <div className="list">
+                    {[...(selectedAgent.tasks?.active || []), ...(selectedAgent.tasks?.recent || [])].map((task) => (
+                      <article key={task.id} className="list-item">
+                        <div>
+                          <strong>{task.kind}</strong>
+                          <small>{task.summary}</small>
+                        </div>
+                        <StatusPill value={task.status} />
+                      </article>
+                    ))}
+                    {!selectedAgent.tasks?.active?.length && !selectedAgent.tasks?.recent?.length ? <div className="empty-inline">Задач нет</div> : null}
+                  </div>
+                </Panel>
+
+                <Panel title="Logs">
+                  <div className="list">
+                    {(selectedAgent.logs || []).map((line, index) => (
+                      <article key={`${selectedAgent.id}-log-${index}`} className="list-item mono">
+                        {line.ts ? `[${line.ts}] ${line.level} ${line.source}: ${line.message}` : String(line)}
+                      </article>
+                    ))}
+                    {!selectedAgent.logs?.length ? <div className="empty-inline">Логов пока нет</div> : null}
+                  </div>
+                </Panel>
+
+                <Panel title="Audit log">
+                  <div className="list">
+                    {agentAudit.map((entry) => (
+                      <article key={entry.id} className="audit-row">
+                        <div>
+                          <strong>{entry.action}</strong>
+                          <small>{entry.summary}</small>
+                        </div>
+                        <div>
+                          <StatusPill value={entry.danger} />
+                          <small>{formatDateTime(entry.ts)}</small>
+                        </div>
+                      </article>
+                    ))}
+                    {!agentAudit.length ? <div className="empty-inline">Audit log пуст</div> : null}
+                  </div>
+                </Panel>
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === "settings" && (
           <div className="stack">
+            {settingsView === "main" && (
+              <>
             <section className="settings-hero">
               <div>
                 <span>Configuration</span>
@@ -1049,6 +1249,11 @@ export default function App() {
                 <span>Навыки</span>
                 <strong>{skillsData.length || skills.length || 0} модулей</strong>
               </button>
+              <button onClick={openSubagentSettings}>
+                <Server size={18} />
+                <span>Субагенты</span>
+                <strong>Политики и адаптеры</strong>
+              </button>
             </section>
 
             <section className="settings-section">
@@ -1075,6 +1280,85 @@ export default function App() {
                 {!cronJobs.length ? <div className="empty-inline">Cron-задач пока нет</div> : null}
               </div>
             </section>
+              </>
+            )}
+
+            {settingsView === "subagents" && (
+              <>
+                <section className="settings-hero">
+                  <div>
+                    <span>Subagents</span>
+                    <h2>Настройки субагентов</h2>
+                    <p>Registry, политики подтверждения и подключенные адаптеры внешних AI-агентов.</p>
+                  </div>
+                  <button onClick={() => setSettingsView("main")}>Назад</button>
+                </section>
+
+                <section className="settings-grid">
+                  <article className="settings-tile">
+                    <Server size={18} />
+                    <span>Registry</span>
+                    <strong>{agents.length} агентов</strong>
+                  </article>
+                  <article className="settings-tile">
+                    <Activity size={18} />
+                    <span>Health</span>
+                    <strong>{healthyAgentsCount}/{agents.length || 0} healthy</strong>
+                  </article>
+                  <article className="settings-tile">
+                    <ShieldCheck size={18} />
+                    <span>Policy</span>
+                    <strong>owner-only опасные</strong>
+                  </article>
+                  <article className="settings-tile">
+                    <FileText size={18} />
+                    <span>Audit</span>
+                    <strong>{agentAudit.length} событий</strong>
+                  </article>
+                </section>
+
+                <section className="settings-section">
+                  <div className="settings-section-head">
+                    <div>
+                      <span>Control policy</span>
+                      <h3>Подтверждения действий</h3>
+                    </div>
+                    <StatusPill value="enabled" />
+                  </div>
+                  <div className="settings-list">
+                    <div><span>safe</span><strong>без подтверждения</strong></div>
+                    <div><span>risky</span><strong>confirmation</strong></div>
+                    <div><span>destructive</span><strong>confirmation + owner only</strong></div>
+                    <div><span>external</span><strong>confirmation + owner only</strong></div>
+                  </div>
+                </section>
+
+                <section className="settings-section">
+                  <div className="settings-section-head">
+                    <div>
+                      <span>Adapters</span>
+                      <h3>Подключенные типы</h3>
+                    </div>
+                    <button onClick={openAgents}>Открыть space</button>
+                  </div>
+                  <div className="settings-compact-list">
+                    {agents.map((agent) => (
+                      <article key={agent.id}>
+                        <div>
+                          <strong>{agent.name}</strong>
+                          <small>{agent.type} · {agent.environment || "-"}</small>
+                        </div>
+                        <div>
+                          <StatusPill value={agent.status} />
+                          <small>{agent.auth?.secretRef || "no secret"}</small>
+                        </div>
+                      </article>
+                    ))}
+                    {!agents.length ? <div className="empty-inline">Субагенты не настроены</div> : null}
+                  </div>
+                </section>
+              </>
+            )}
           </div>
         )}
 

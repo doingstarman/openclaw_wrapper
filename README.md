@@ -18,10 +18,21 @@ one service behind a reverse proxy.
   - `GET /api/miniapp/overview`
   - `GET /api/miniapp/sessions`
   - `GET /api/miniapp/ai`
+  - `GET /api/miniapp/agents`
+  - `GET /api/miniapp/agents/:id`
+  - `GET /api/miniapp/agents/:id/capabilities`
+  - `GET /api/miniapp/agents/:id/logs`
+  - `GET /api/miniapp/agents/:id/tasks`
+  - `POST /api/miniapp/agents/:id/control`
+  - `GET /api/miniapp/agent-audit?agentId=...`
   - `GET /api/miniapp/approvals`
   - `POST /api/miniapp/approvals/:id/approve`
   - `POST /api/miniapp/approvals/:id/reject`
   - `GET /api/miniapp/logs?cursor=...`
+
+The `agents` endpoints are the MVP Agent Control Plane: registry, dynamic command
+schema, guarded control actions, per-agent logs/tasks in detail responses, and an
+audit log for every accepted or rejected control attempt.
 
 ## Backend Environment
 

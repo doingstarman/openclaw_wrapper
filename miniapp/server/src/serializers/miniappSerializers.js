@@ -65,6 +65,42 @@ export const serializeSkillDetail = (skill) => ({
   logs: skill.logs || []
 });
 
+export const serializeAgents = (agents, actorUserId = "") =>
+  agents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    type: agent.type,
+    status: agent.status,
+    enabled: agent.enabled !== false,
+    capabilities: agent.capabilities || [],
+    endpoints: agent.endpoints || {},
+    auth: agent.auth || { type: "none", secretRef: "" },
+    ownerUserIds: agent.ownerUserIds || [],
+    ownedByCurrentUser: (agent.ownerUserIds || []).map(String).includes(String(actorUserId)),
+    environment: agent.environment || "",
+    tags: agent.tags || [],
+    health: agent.health || null,
+    commands: agent.commandSchema || { actions: [] }
+  }));
+
+export const serializeAgentDetail = (agent, actorUserId = "") => ({
+  ...serializeAgents([agent], actorUserId)[0],
+  tasks: agent.tasks || { active: [], recent: [] },
+  logs: agent.logs || []
+});
+
+export const serializeAgentAudit = (entries) =>
+  entries.map((entry) => ({
+    id: entry.id,
+    ts: entry.ts,
+    agentId: entry.agentId,
+    actorUserId: entry.actorUserId,
+    action: entry.action,
+    danger: entry.danger,
+    outcome: entry.outcome,
+    summary: entry.summary
+  }));
+
 export const serializeApprovals = (approvals) =>
   approvals.map((a) => ({
     id: a.id,

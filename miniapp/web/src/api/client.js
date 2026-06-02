@@ -45,6 +45,15 @@ export const api = {
   skills: () => jsonFetch("/api/miniapp/skills"),
   skill: (id) => jsonFetch(`/api/miniapp/skills/${encodeURIComponent(id)}`),
   skillAction: (id, action) => jsonFetch(`/api/miniapp/skills/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
+  agents: () => jsonFetch("/api/miniapp/agents"),
+  agent: (id) => jsonFetch(`/api/miniapp/agents/${encodeURIComponent(id)}`),
+  agentControl: (id, payload) =>
+    jsonFetch(`/api/miniapp/agents/${encodeURIComponent(id)}/control`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  agentAudit: (agentId = "") =>
+    jsonFetch(`/api/miniapp/agent-audit${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`),
   approvals: () => jsonFetch("/api/miniapp/approvals"),
   subagents: () => jsonFetch("/api/miniapp/subagents"),
   subagentAction: (id, action, message = "") => jsonFetch(`/api/miniapp/subagents/${encodeURIComponent(id)}/${action}`, {

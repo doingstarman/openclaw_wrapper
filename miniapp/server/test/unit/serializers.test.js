@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { serializeApprovals, serializeLogsPage, serializeOverview } from "../../src/serializers/miniappSerializers.js";
+import {
+  serializeAgentAudit,
+  serializeAgentDetail,
+  serializeAgents,
+  serializeApprovals,
+  serializeLogsPage,
+  serializeOverview
+} from "../../src/serializers/miniappSerializers.js";
 
 describe("miniapp serializers", () => {
   it("serializes overview with expected fields", () => {
@@ -49,5 +56,37 @@ describe("miniapp serializers", () => {
 
     const page = serializeLogsPage({ items: ["x"], nextCursor: "1", hasMore: true });
     expect(page).toEqual({ items: ["x"], nextCursor: "1", hasMore: true });
+  });
+
+  it("serializes agent control plane fields", () => {
+    const agent = {
+      id: "a1",
+      name: "Agent",
+      type: "webhook",
+      status: "healthy",
+      enabled: true,
+      capabilities: ["sync"],
+      endpoints: { health: "/health" },
+      auth: { type: "hmac", secretRef: "AGENT_SECRET" },
+      ownerUserIds: ["42"],
+      environment: "prod",
+      tags: ["prod"],
+      health: { ok: true },
+      commandSchema: { actions: [{ id: "sync_now", danger: "safe", params: [] }] },
+      tasks: { active: [], recent: [] },
+      logs: [{ message: "ok" }]
+    };
+
+    expect(serializeAgents([agent], "42")[0]).toMatchObject({
+      id: "a1",
+      ownedByCurrentUser: true,
+      commands: { actions: [{ id: "sync_now", danger: "safe", params: [] }] }
+    });
+    expect(serializeAgentDetail(agent, "7").ownedByCurrentUser).toBe(false);
+    expect(serializeAgentAudit([{ id: "e1", agentId: "a1", action: "sync_now" }])[0]).toMatchObject({
+      id: "e1",
+      agentId: "a1",
+      action: "sync_now"
+    });
   });
 });

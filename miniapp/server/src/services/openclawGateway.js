@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { mockAi, mockLogs, mockOverview, mockSessions, mockSkills, mockSubagents, seedApprovals } from "../data/mockData.js";
+import { mockAgents, seedAgentAudit } from "../data/mockAgents.js";
 import { logger } from "../logger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -75,6 +76,17 @@ const readLastJsonlEvents = async (filePath, limit = 80) => {
   } catch {
     return [];
   }
+};
+
+const cloneJson = (value) => JSON.parse(JSON.stringify(value));
+
+const confirmationDanger = new Set(["risky", "destructive", "external"]);
+const ownerOnlyDanger = new Set(["destructive", "external"]);
+
+const normalizeItems = (payload, fallback = []) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return fallback;
 };
 
 const textFromContent = (content) => {
@@ -307,6 +319,8 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
   const approvals = seedApprovals();
   const skills = mockSkills.map((skill) => ({ ...skill, logs: [...(skill.logs || [])] }));
   const subagents = mockSubagents.map((item) => ({ ...item }));
+  const agents = cloneJson(mockAgents);
+  const agentAudit = seedAgentAudit();
   const logs = [...mockLogs];
   const stateDir = process.env.OPENCLAW_STATE_DIR || "/host/openclaw";
 
@@ -352,6 +366,129 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
       logger.warn("openclaw.state.fallback", { reason: error.message });
       return null;
     }
+  };
+
+  const findLocalAgent = (agentId) => agents.find((agent) => agent.id === agentId);
+
+  const pushAgentAudit = ({ agentId, actorUserId, action, danger, outcome, summary }) => {
+    const entry = {
+      id: `audit_${Date.now()}_${agentAudit.length + 1}`,
+      ts: new Date().toISOString(),
+      agentId,
+      actorUserId: String(actorUserId || ""),
+      action,
+      danger,
+      outcome,
+      summary
+    };
+    agentAudit.unshift(entry);
+    logs.unshift(`[${entry.ts}] agent.${agentId} ${action} ${outcome} by ${entry.actorUserId}`);
+    return entry;
+  };
+
+  const controlLocalAgent = ({ agentId, action, params = {}, confirmed = false, actorUserId }) => {
+    const agent = findLocalAgent(agentId);
+    if (!agent) {
+      return { status: 404, error: "Agent not found" };
+    }
+
+    const command = (agent.commandSchema?.actions || []).find((item) => item.id === action);
+    if (!command) {
+      const audit = pushAgentAudit({
+        agentId,
+        actorUserId,
+        action,
+        danger: "unknown",
+        outcome: "rejected",
+        summary: "Unsupported control action"
+      });
+      return { status: 400, error: "Unsupported agent action", audit };
+    }
+
+    const danger = command.danger || "safe";
+    const isOwner = (agent.ownerUserIds || []).map(String).includes(String(actorUserId));
+    if (ownerOnlyDanger.has(danger) && !isOwner) {
+      const audit = pushAgentAudit({
+        agentId,
+        actorUserId,
+        action,
+        danger,
+        outcome: "rejected",
+        summary: "Owner-only action denied"
+      });
+      return { status: 403, error: "Only agent owners can run this action", audit };
+    }
+
+    if (confirmationDanger.has(danger) && confirmed !== true) {
+      return {
+        status: 409,
+        error: "Action requires confirmation",
+        requiresConfirmation: true,
+        danger,
+        action: command
+      };
+    }
+
+    for (const param of command.params || []) {
+      if (param.required && !params?.[param.name]) {
+        return { status: 400, error: `Missing required action param: ${param.name}` };
+      }
+    }
+
+    if (action === "resume") {
+      agent.enabled = true;
+      agent.status = agent.health?.status === "unknown" ? "healthy" : agent.status;
+    }
+    if (action === "pause") {
+      agent.enabled = false;
+      agent.status = "unknown";
+    }
+    if (action === "restart" || action === "redeploy" || action === "reload_config") {
+      agent.status = "degraded";
+      agent.health = {
+        ...(agent.health || {}),
+        ok: false,
+        status: "degraded",
+        lastActivityAt: new Date().toISOString(),
+        lastError: `${command.label} accepted`
+      };
+    }
+    if (action === "sync_now") {
+      agent.tasks = {
+        active: [
+          {
+            id: `task_${Date.now()}`,
+            kind: "sync",
+            status: "running",
+            startedAt: new Date().toISOString(),
+            finishedAt: null,
+            summary: "Manual sync requested"
+          }
+        ],
+        recent: agent.tasks?.recent || []
+      };
+      agent.health = {
+        ...(agent.health || {}),
+        lastActivityAt: new Date().toISOString()
+      };
+    }
+
+    const jobId = `job_${agentId}_${Date.now()}`;
+    const audit = pushAgentAudit({
+      agentId,
+      actorUserId,
+      action,
+      danger,
+      outcome: "accepted",
+      summary: `${command.label || action} accepted as ${jobId}`
+    });
+    return {
+      status: 202,
+      accepted: true,
+      jobId,
+      agent,
+      audit
+    };
   };
 
   const getLogsPage = async (cursor, limit = 12) => {
@@ -419,6 +556,40 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
       }
       logs.unshift(`[${new Date().toISOString()}] skill.${skillId} ${action} by ${actorId}`);
       return item;
+    },
+    getAgents: async () => normalizeItems(await safeGatewayRead("/api/miniapp/agents", agents), agents),
+    getAgent: async (agentId) => {
+      const payload = await safeGatewayRead(`/api/miniapp/agents/${encodeURIComponent(agentId)}`, null);
+      if (payload?.item) return payload.item;
+      return findLocalAgent(agentId) || null;
+    },
+    getAgentCapabilities: async (agentId) => {
+      const agent = findLocalAgent(agentId);
+      return agent?.commandSchema || null;
+    },
+    getAgentLogs: async (agentId) => {
+      const agent = findLocalAgent(agentId);
+      return agent?.logs || null;
+    },
+    getAgentTasks: async (agentId) => {
+      const agent = findLocalAgent(agentId);
+      return agent?.tasks || null;
+    },
+    controlAgent: async (agentId, payload, actorUserId) =>
+      controlLocalAgent({
+        agentId,
+        action: payload?.action,
+        params: payload?.params || {},
+        confirmed: payload?.confirmed === true,
+        actorUserId
+      }),
+    getAgentAudit: async (agentId = "") => {
+      const payload = await safeGatewayRead(
+        `/api/miniapp/agent-audit${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
+        null
+      );
+      if (payload) return normalizeItems(payload, []);
+      return agentAudit.filter((entry) => !agentId || entry.agentId === agentId);
     },
     getApprovals: async () => (await safeState())?.approvals || safeGatewayRead("/api/miniapp/approvals", approvals),
     getSubagents: async () => {

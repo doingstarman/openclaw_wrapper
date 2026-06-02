@@ -102,4 +102,77 @@ describe("miniapp routes", () => {
 
     expect(checked.body.item.lastRunAt).toBeTruthy();
   });
+
+  it("serves agent registry, capabilities, control confirmations, and audit", async () => {
+    const app = createApp({
+      telegramBotToken: BOT_TOKEN,
+      allowedUserIds: new Set(["42"]),
+      adminUserIds: new Set(["42"])
+    });
+    const initData = signInitData({
+      authDate: Math.floor(Date.now() / 1000),
+      user: { id: 42, username: "admin" }
+    });
+
+    const agents = await request(app)
+      .get("/api/miniapp/agents")
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(agents.body.items.length).toBeGreaterThan(0);
+    expect(agents.body.items[0]).toHaveProperty("commands.actions");
+
+    const capabilities = await request(app)
+      .get("/api/miniapp/agents/calendar-agent/capabilities")
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(capabilities.body.actions.some((action) => action.id === "restart")).toBe(true);
+
+    const needsConfirmation = await request(app)
+      .post("/api/miniapp/agents/calendar-agent/control")
+      .set("x-telegram-init-data", initData)
+      .send({ action: "restart" })
+      .expect(409);
+
+    expect(needsConfirmation.body.requiresConfirmation).toBe(true);
+
+    const accepted = await request(app)
+      .post("/api/miniapp/agents/calendar-agent/control")
+      .set("x-telegram-init-data", initData)
+      .send({ action: "restart", confirmed: true })
+      .expect(202);
+
+    expect(accepted.body.accepted).toBe(true);
+    expect(accepted.body.jobId).toContain("calendar-agent");
+
+    const audit = await request(app)
+      .get("/api/miniapp/agent-audit?agentId=calendar-agent")
+      .set("x-telegram-init-data", initData)
+      .expect(200);
+
+    expect(audit.body.items[0]).toMatchObject({
+      agentId: "calendar-agent",
+      action: "restart",
+      outcome: "accepted"
+    });
+  });
+
+  it("blocks destructive and external agent actions for non-owners", async () => {
+    const app = createApp({
+      telegramBotToken: BOT_TOKEN,
+      allowedUserIds: new Set(["7"]),
+      adminUserIds: new Set(["7"])
+    });
+    const initData = signInitData({
+      authDate: Math.floor(Date.now() / 1000),
+      user: { id: 7, username: "admin-not-owner" }
+    });
+
+    await request(app)
+      .post("/api/miniapp/agents/calendar-agent/control")
+      .set("x-telegram-init-data", initData)
+      .send({ action: "reset_cursor", params: { source: "calendar" }, confirmed: true })
+      .expect(403);
+  });
 });

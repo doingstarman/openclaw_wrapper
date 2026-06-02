@@ -4,6 +4,9 @@ import { asyncRoute } from "../middleware/http.js";
 import { getUserAccess } from "../security/accessPolicy.js";
 import { validateTelegramInitData } from "../security/telegramInitData.js";
 import {
+  serializeAgentAudit,
+  serializeAgentDetail,
+  serializeAgents,
   serializeAi,
   serializeApprovals,
   serializeSkillDetail,
@@ -123,6 +126,65 @@ export const createMiniappRouter = ({ config, dataSource }) => {
       return res.status(404).json({ error: "Skill not found" });
     }
     return res.json({ item: serializeSkillDetail(item) });
+  }));
+
+  router.get("/agents", asyncRoute(async (req, res) => {
+    res.json({ items: serializeAgents(await dataSource.getAgents(), req.auth.user.id) });
+  }));
+
+  router.get("/agents/:id", asyncRoute(async (req, res) => {
+    const item = await dataSource.getAgent(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    return res.json({ item: serializeAgentDetail(item, req.auth.user.id) });
+  }));
+
+  router.get("/agents/:id/capabilities", asyncRoute(async (req, res) => {
+    const capabilities = await dataSource.getAgentCapabilities(req.params.id);
+    if (!capabilities) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    return res.json(capabilities);
+  }));
+
+  router.get("/agents/:id/logs", asyncRoute(async (req, res) => {
+    const items = await dataSource.getAgentLogs(req.params.id);
+    if (!items) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    return res.json({ items });
+  }));
+
+  router.get("/agents/:id/tasks", asyncRoute(async (req, res) => {
+    const tasks = await dataSource.getAgentTasks(req.params.id);
+    if (!tasks) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    return res.json(tasks);
+  }));
+
+  router.post("/agents/:id/control", asyncRoute(async (req, res) => {
+    const result = await dataSource.controlAgent(req.params.id, req.body, req.auth.user.id);
+    if (result.error) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        requiresConfirmation: result.requiresConfirmation,
+        danger: result.danger,
+        action: result.action
+      });
+    }
+    return res.status(202).json({
+      accepted: result.accepted,
+      jobId: result.jobId,
+      item: serializeAgentDetail(result.agent, req.auth.user.id),
+      audit: serializeAgentAudit([result.audit])[0]
+    });
+  }));
+
+  router.get("/agent-audit", asyncRoute(async (req, res) => {
+    const entries = await dataSource.getAgentAudit(req.query.agentId || "");
+    res.json({ items: serializeAgentAudit(entries) });
   }));
 
   router.get("/approvals", asyncRoute(async (_req, res) => {
