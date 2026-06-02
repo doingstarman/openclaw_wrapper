@@ -10,7 +10,8 @@ import {
   serializeSkills,
   serializeLogsPage,
   serializeOverview,
-  serializeSessions
+  serializeSessions,
+  serializeSubagents
 } from "../serializers/miniappSerializers.js";
 
 const getInitDataFromRequest = (req) =>
@@ -126,6 +127,25 @@ export const createMiniappRouter = ({ config, dataSource }) => {
 
   router.get("/approvals", asyncRoute(async (_req, res) => {
     res.json({ items: serializeApprovals(await dataSource.getApprovals()) });
+  }));
+
+  router.get("/subagents", asyncRoute(async (_req, res) => {
+    res.json({ items: serializeSubagents(await dataSource.getSubagents()) });
+  }));
+
+  router.post("/subagents/:id/:action", asyncRoute(async (req, res) => {
+    if (!req.auth.access.permissions.canApprove) {
+      return res.status(403).json({ error: "Insufficient permissions for subagent control" });
+    }
+    const { id, action } = req.params;
+    if (!["kill", "steer"].includes(action)) {
+      return res.status(400).json({ error: "Unsupported subagent action" });
+    }
+    const item = await dataSource.updateSubagent(id, action, req.auth.user.id, req.body?.message || "");
+    if (!item) {
+      return res.status(404).json({ error: "Subagent not found" });
+    }
+    return res.json({ item: serializeSubagents([item])[0] });
   }));
 
   router.post("/approvals/:id/:action", asyncRoute(async (req, res) => {

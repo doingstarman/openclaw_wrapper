@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { mockAi, mockLogs, mockOverview, mockSessions, mockSkills, seedApprovals } from "../data/mockData.js";
+import { mockAi, mockLogs, mockOverview, mockSessions, mockSkills, mockSubagents, seedApprovals } from "../data/mockData.js";
 import { logger } from "../logger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -106,6 +106,43 @@ const sessionTitle = async (stateDir, session) => {
     title: title ? title.slice(0, 64) : session.key || session.sessionId,
     last: last ? last.slice(0, 96) : relativeTime(session.updatedAt)
   };
+};
+
+const subagentStatus = (value = {}) => {
+  if (value.abortedLastRun) return "killed";
+  if (value.status === "running") return "running";
+  if (value.status === "failed") return "failed";
+  if (value.status === "timeout" || value.timedOut) return "timed_out";
+  return value.status || "completed";
+};
+
+const loadSubagentsFromState = async (stateDir) => {
+  const sessionsPath = path.join(stateDir, "agents/main/sessions/sessions.json");
+  const sessionsObject = await readJson(sessionsPath, {});
+  const items = await Promise.all(
+    Object.entries(sessionsObject || {})
+      .filter(([key]) => key.includes(":subagent:"))
+      .map(async ([key, value]) => {
+        const meta = await sessionTitle(stateDir, { ...value, key });
+        const status = subagentStatus(value);
+        return {
+          id: value.runId || value.taskId || key,
+          label: value.label || meta.title || key.split(":").pop(),
+          task: meta.title || value.task || "Subagent task",
+          status,
+          outcome: value.terminalOutcome || (status === "completed" ? "success" : null),
+          requesterSessionKey: value.requesterSessionKey || value.parentSessionKey || "agent:main:main",
+          childSessionKey: key,
+          model: [value.modelProvider, value.model].filter(Boolean).join("/") || value.model || "default",
+          thinking: value.thinking || "default",
+          createdAt: value.createdAt || value.updatedAt || 0,
+          updatedAt: value.updatedAt || value.lastEventAt || value.createdAt || 0,
+          summary: value.terminalSummary || value.progressSummary || meta.last || relativeTime(value.updatedAt),
+          lastAction: null
+        };
+      })
+  );
+  return items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
 };
 
 const loadOpenClawState = async (stateDir) => {
@@ -280,6 +317,7 @@ const loadOpenClawState = async (stateDir) => {
 export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayToken, requestTimeoutMs }) => {
   const approvals = seedApprovals();
   const skills = mockSkills.map((skill) => ({ ...skill, logs: [...(skill.logs || [])] }));
+  const subagents = mockSubagents.map((item) => ({ ...item }));
   const logs = [...mockLogs];
   const stateDir = process.env.OPENCLAW_STATE_DIR || "/host/openclaw";
 
@@ -394,6 +432,38 @@ export const createMiniappDataSource = ({ openclawGatewayUrl, openclawGatewayTok
       return item;
     },
     getApprovals: async () => (await safeState())?.approvals || safeGatewayRead("/api/miniapp/approvals", approvals),
+    getSubagents: async () => {
+      try {
+        if (await exists(path.join(stateDir, "agents/main/sessions/sessions.json"))) {
+          const live = await loadSubagentsFromState(stateDir);
+          if (live.length) return live;
+        }
+      } catch (error) {
+        logger.warn("openclaw.subagents.fallback", { reason: error.message });
+      }
+      return safeGatewayRead("/api/miniapp/subagents", subagents);
+    },
+    updateSubagent: async (subagentId, action, actorId, message = "") => {
+      const live = await loadSubagentsFromState(stateDir).catch(() => []);
+      const item = live.find((entry) => entry.id === subagentId || entry.childSessionKey === subagentId)
+        || subagents.find((entry) => entry.id === subagentId || entry.childSessionKey === subagentId);
+      if (!item) return null;
+      const stamp = new Date().toISOString();
+      item.lastAction = action === "steer"
+        ? `steer by ${actorId}: ${sanitize(message).slice(0, 160)}`
+        : `kill requested by ${actorId}`;
+      if (action === "kill") {
+        item.status = "killed";
+        item.outcome = "cancelled";
+        item.summary = "Остановка запрошена из Mini App. Если это live-run, действие будет доступно через OpenClaw bridge после подключения write API.";
+      }
+      if (action === "steer") {
+        item.summary = `Инструкция сохранена: ${sanitize(message).slice(0, 180) || "пустое сообщение"}`;
+      }
+      item.updatedAt = Date.now();
+      logs.unshift(`[${stamp}] subagent.${subagentId} ${action} by ${actorId}`);
+      return item;
+    },
     approve: async (approvalId, action, actorId) => {
       const item = approvals.find((a) => a.id === approvalId) || (await safeState())?.approvals.find((a) => a.id === approvalId);
       if (!item) return null;

@@ -46,6 +46,11 @@ export const api = {
   skill: (id) => jsonFetch(`/api/miniapp/skills/${encodeURIComponent(id)}`),
   skillAction: (id, action) => jsonFetch(`/api/miniapp/skills/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
   approvals: () => jsonFetch("/api/miniapp/approvals"),
+  subagents: () => jsonFetch("/api/miniapp/subagents"),
+  subagentAction: (id, action, message = "") => jsonFetch(`/api/miniapp/subagents/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ message })
+  }),
   approve: (id) => jsonFetch(`/api/miniapp/approvals/${id}/approve`, { method: "POST" }),
   reject: (id) => jsonFetch(`/api/miniapp/approvals/${id}/reject`, { method: "POST" }),
   logs: (cursor = "0") => jsonFetch(`/api/miniapp/logs?cursor=${encodeURIComponent(cursor)}`)

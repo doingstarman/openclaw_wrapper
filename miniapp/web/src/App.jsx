@@ -270,6 +270,7 @@ export default function App() {
   const [ai, setAi] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [skills, setSkills] = useState([]);
+  const [subagents, setSubagents] = useState([]);
   const [selectedSkill, setSelectedSkill] = useState(null);
   const [agentView, setAgentView] = useState("main");
   const [skillQuery, setSkillQuery] = useState("");
@@ -296,6 +297,7 @@ export default function App() {
   const pendingApprovals = approvals.filter((item) => item.state === "pending");
   const activeSkillsCount = skills.filter((skill) => skill.status === "active").length;
   const attentionSkillsCount = skills.filter((skill) => ["failed", "needs_config", "missing_key"].includes(skill.health)).length;
+  const runningSubagentsCount = subagents.filter((item) => item.status === "running").length;
   const currentEvent = useMemo(() => {
     if (overview?.currentEvent) {
       return {
@@ -408,12 +410,14 @@ export default function App() {
       }
       if (tab === "ai") setAi(await api.ai());
       if (tab === "agent") {
-        const [approvalsData, skillsData] = await Promise.all([
+        const [approvalsData, skillsData, subagentsData] = await Promise.all([
           api.approvals(),
-          api.skills()
+          api.skills(),
+          api.subagents()
         ]);
         setApprovals(approvalsData.items || []);
         setSkills(skillsData.items || []);
+        setSubagents(subagentsData.items || []);
       }
       if (tab === "logs") {
         const logsData = await api.logs("0");
@@ -464,6 +468,13 @@ export default function App() {
     setSkills(skillsData.items || []);
   };
 
+  const openSubagents = async () => {
+    setActiveTab("agent");
+    setAgentView("subagents");
+    const data = await api.subagents();
+    setSubagents(data.items || []);
+  };
+
   const openSkillDetail = async (skillId) => {
     const detail = await api.skill(skillId);
     setSelectedSkill(detail.item);
@@ -478,6 +489,20 @@ export default function App() {
       setSkills((prev) => prev.map((skill) => (skill.id === skillId ? { ...skill, ...updated } : skill)));
     } catch (err) {
       clientLogger.error("ui.skillAction.failed", { skillId, action, error: err.message });
+      setError(err.message);
+    }
+  };
+
+  const runSubagentAction = async (subagentId, action) => {
+    const message = action === "steer" ? window.prompt("Что передать субагенту?") : "";
+    if (action === "steer" && !message?.trim()) return;
+    if (action === "kill" && !window.confirm("Остановить этого субагента?")) return;
+    try {
+      const result = await api.subagentAction(subagentId, action, message || "");
+      const updated = result.item;
+      setSubagents((prev) => prev.map((item) => (item.id === updated.id || item.childSessionKey === updated.childSessionKey ? { ...item, ...updated } : item)));
+    } catch (err) {
+      clientLogger.error("ui.subagentAction.failed", { subagentId, action, error: err.message });
       setError(err.message);
     }
   };
@@ -731,6 +756,7 @@ export default function App() {
                     <div><span>модель</span><strong>{primaryModel?.id || overview?.primaryModel || "-"}</strong></div>
                     <div><span>роль</span><strong>{displayStatus(bootstrap?.role || "guest")}</strong></div>
                     <div><span>skills</span><strong>{activeSkillsCount}/{skills.length || skillsData.length || 0}</strong></div>
+                    <div><span>субагенты</span><strong>{runningSubagentsCount}/{subagents.length}</strong></div>
                   </div>
                 </section>
 
@@ -739,6 +765,11 @@ export default function App() {
                     <Wrench size={18} />
                     <span>Навыки</span>
                     <strong>{attentionSkillsCount ? `${attentionSkillsCount} требуют внимания` : `${activeSkillsCount} активны`}</strong>
+                  </button>
+                  <button onClick={openSubagents}>
+                    <Workflow size={18} />
+                    <span>Субагенты</span>
+                    <strong>{runningSubagentsCount ? `${runningSubagentsCount} в работе` : `${subagents.length} в истории`}</strong>
                   </button>
                   <button>
                     <ShieldCheck size={18} />
@@ -785,6 +816,55 @@ export default function App() {
                         <StatusPill value={alert.level} />
                       </article>
                     ))}
+                  </div>
+                </Panel>
+              </>
+            )}
+
+            {agentView === "subagents" && (
+              <>
+                <section className="skills-hero">
+                  <div>
+                    <span>Delegation</span>
+                    <h2>Субагенты</h2>
+                    <p>{subagents.length} запусков · {runningSubagentsCount} сейчас в работе · завершение приходит push-уведомлением</p>
+                  </div>
+                  <button onClick={() => setAgentView("main")}>Назад</button>
+                </section>
+
+                <Panel title="Управление" right={<button onClick={openSubagents}>Обновить</button>}>
+                  <div className="list">
+                    {subagents.map((item) => (
+                      <article key={item.id || item.childSessionKey} className="skill-card">
+                        <div className="skill-card-main skill-card-main-static">
+                          <span>
+                            <strong>{item.label || item.id}</strong>
+                            <small>{item.task || "Задача не указана"}</small>
+                          </span>
+                          <div>
+                            <StatusPill value={item.status || "unknown"} />
+                            {item.outcome ? <StatusPill value={item.outcome} /> : null}
+                          </div>
+                        </div>
+                        <div className="skill-meta-grid">
+                          <div><span>создан</span><strong>{formatDateTime(item.createdAt)}</strong></div>
+                          <div><span>обновлен</span><strong>{formatDateTime(item.updatedAt)}</strong></div>
+                          <div><span>модель</span><strong>{item.model || "default"}</strong></div>
+                          <div><span>thinking</span><strong>{item.thinking || "default"}</strong></div>
+                        </div>
+                        <div className="kv-list compact">
+                          <div><span>child</span><strong>{item.childSessionKey || "-"}</strong></div>
+                          <div><span>requester</span><strong>{item.requesterSessionKey || "-"}</strong></div>
+                        </div>
+                        <p className="muted-copy">{item.summary || "Пока нет summary"}</p>
+                        {item.lastAction ? <p className="muted-copy">Последнее действие: {item.lastAction}</p> : null}
+                        <div className="skill-actions">
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "steer")}>Направить</button>
+                          <button disabled={!canApprove || item.status !== "running"} onClick={() => runSubagentAction(item.id, "kill")}>Остановить</button>
+                        </div>
+                      </article>
+                    ))}
+                    {!subagents.length ? <div className="empty-inline">Активных или сохраненных субагентов не найдено</div> : null}
                   </div>
                 </Panel>
               </>

@@ -131,6 +131,39 @@ export const mockSkills = [
   }
 ];
 
+export const mockSubagents = [
+  {
+    id: "subagent_demo_1",
+    label: "аудит mini app",
+    task: "Проверить UX и риски Telegram Mini App",
+    status: "completed",
+    outcome: "success",
+    requesterSessionKey: "agent:main:telegram:direct:1037751541",
+    childSessionKey: "agent:main:subagent:demo-1",
+    model: "default",
+    thinking: "medium",
+    createdAt: Date.now() - 1000 * 60 * 34,
+    updatedAt: Date.now() - 1000 * 60 * 8,
+    summary: "Найдены мелкие UX-замечания, критичных проблем нет.",
+    lastAction: null
+  },
+  {
+    id: "subagent_demo_2",
+    label: "исследование деплоя",
+    task: "Проверить docker compose и production env",
+    status: "running",
+    outcome: null,
+    requesterSessionKey: "agent:main:main",
+    childSessionKey: "agent:main:subagent:demo-2",
+    model: "default",
+    thinking: "medium",
+    createdAt: Date.now() - 1000 * 60 * 12,
+    updatedAt: Date.now() - 1000 * 60 * 2,
+    summary: "Проверяет конфигурацию контейнера…",
+    lastAction: null
+  }
+];
+
 export const mockAi = {
   totals: {
     tokens24h: "1.53M",

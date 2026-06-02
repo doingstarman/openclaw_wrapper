@@ -1454,3 +1454,29 @@ button:disabled {
     padding: 12px 12px 88px;
   }
 }
+
+.skill-card-main-static {
+  width: 100%;
+  color: inherit;
+  cursor: default;
+}
+
+.kv-list.compact {
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.75rem;
+}
+
+.kv-list.compact strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted-copy {
+  margin: 0;
+  color: #a7adb8;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}

@@ -79,3 +79,20 @@ export const serializeLogsPage = ({ items, nextCursor, hasMore }) => ({
   nextCursor,
   hasMore
 });
+
+export const serializeSubagents = (subagents) =>
+  subagents.map((item) => ({
+    id: item.id,
+    label: item.label,
+    task: item.task,
+    status: item.status,
+    outcome: item.outcome,
+    requesterSessionKey: item.requesterSessionKey,
+    childSessionKey: item.childSessionKey,
+    model: item.model,
+    thinking: item.thinking,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    summary: item.summary,
+    lastAction: item.lastAction || null
+  }));
