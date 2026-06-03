@@ -19,6 +19,21 @@ Primary product shape:
 - `ИИ`: token/model analytics.
 - `Настройки`: app/runtime/security settings, including subagent settings.
 
+## Branches
+
+- `main`: production branch. Keep it stable and release-ready.
+- `beta`: development branch for new product features and backend/frontend changes before production.
+- `design`: design branch for visual/UI experiments, layout work, and design-system changes.
+
+Branch discipline:
+
+- Do not create separate task branches by default.
+- Create new branches only for repeated task types or recurring workstreams, and only after explicit agreement with the user.
+- When a branch is created for a repeated task type, document its purpose in this file or in the task notes.
+- Keep production fixes on `main` only when they are ready for production.
+- Put new feature work in `beta` unless the user explicitly chooses another branch.
+- Put design-only work in `design` unless it is part of a feature already being built in `beta`.
+
 ## Commands
 
 Run from repository root unless noted.
